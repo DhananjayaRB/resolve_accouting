@@ -5,7 +5,7 @@
       "src": "resolve_accouting/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "resolve_accouting/dist"
+        "distDir": "resolve_accouting/resolve_accouting/dist"
       }
     },
     {
@@ -20,7 +20,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "resolve_accouting/dist/index.html"
+      "dest": "resolve_accouting/resolve_accouting/dist/index.html"
     }
   ]
 }
