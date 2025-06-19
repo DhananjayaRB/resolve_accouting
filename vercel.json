@@ -17,10 +17,12 @@
     {
       "src": "/api/(.*)",
       "dest": "resolve_accouting/server/index.js"
-    },
+    }
+  ],
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "resolve_accouting/resolve_accouting/dist/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
