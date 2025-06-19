@@ -15,10 +15,6 @@
   ],
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/resolve_accouting/server/index.js"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
