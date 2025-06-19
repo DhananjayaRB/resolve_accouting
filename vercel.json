@@ -7,10 +7,6 @@
       "config": {
         "distDir": "dist"
       }
-    },
-    {
-      "src": "resolve_accouting/server/index.js",
-      "use": "@vercel/node"
     }
   ],
   "rewrites": [
