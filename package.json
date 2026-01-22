@@ -16,6 +16,8 @@
     "db:test": "node test-db-connection.js",
     "db:clear-tally": "node resolve_accouting/server/db/clear-tally-configs.js",
     "db:fix-tally": "node resolve_accouting/server/db/fix-tally-config-table.js",
+    "db:truncate": "node resolve_accouting/server/db/truncate-all.js",
+    "db:truncate-all": "node resolve_accouting/server/db/truncate-all.js --include-migrations",
     "setup:env": "node create-env.js"
   },
   "dependencies": {

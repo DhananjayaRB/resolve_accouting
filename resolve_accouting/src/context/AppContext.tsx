@@ -75,10 +75,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchLedgers = async () => {
     try {
       console.log('Fetching ledgers...');
-      const response = await fetch(`${LOCAL_API_URL}/ledgers`, {
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        console.error('No organization ID found');
+        return;
+      }
+      
+      const response = await fetch(`${LOCAL_API_URL}/ledgers?org_id=${org_id}`, {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Org-Id': org_id
         }
       });
 
@@ -154,10 +161,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const fetchPayrollMappings = async () => {
     try {
-      const response = await fetch(`${LOCAL_API_URL}/payroll-mappings`, {
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        console.error('No organization ID found');
+        return;
+      }
+      
+      const response = await fetch(`${LOCAL_API_URL}/payroll-mappings?org_id=${org_id}`, {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Org-Id': org_id
         }
       });
 
@@ -202,6 +216,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Transform the data to match the API's expected format
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        throw new Error('Organization ID is required');
+      }
+
       const requestBody: any = {
         name: ledgerHead.name.trim(),
         code: ledgerHead.code?.trim() || null,
@@ -209,6 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         is_active: ledgerHead.isActive !== undefined ? ledgerHead.isActive : true,
         financial_year: ledgerHead.financialYear?.trim() || null,
         description: ledgerHead.description?.trim() || null,
+        org_id: org_id,
       };
 
       // Remove null values to avoid sending them
@@ -222,6 +242,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Org-Id': org_id
         },
         body: JSON.stringify(requestBody),
       });
@@ -266,17 +287,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateLedgerHead = async (id: string, ledgerHead: Partial<LedgerHead>) => {
     try {
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        throw new Error('Organization ID is required');
+      }
+
       // Transform the data to match the API's expected format
       const requestBody = {
         ...ledgerHead,
         is_active: ledgerHead.isActive,
-        financial_year: ledgerHead.financialYear
+        financial_year: ledgerHead.financialYear,
+        org_id: org_id
       };
 
-      const response = await fetch(`${LOCAL_API_URL}/ledgers/${id}`, {
+      const response = await fetch(`${LOCAL_API_URL}/ledgers/${id}?org_id=${org_id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'X-Org-Id': org_id
         },
         body: JSON.stringify(requestBody),
       });
@@ -315,8 +343,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteLedgerHead = async (id: string) => {
     try {
-      const response = await fetch(`${LOCAL_API_URL}/ledgers/${id}`, {
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        throw new Error('Organization ID is required');
+      }
+
+      const response = await fetch(`${LOCAL_API_URL}/ledgers/${id}?org_id=${org_id}`, {
         method: 'DELETE',
+        headers: {
+          'X-Org-Id': org_id
+        }
       });
 
       if (!response.ok) throw new Error('Failed to delete ledger');
@@ -337,6 +373,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Payroll Mapping Functions
   const addPayrollMapping = async (mapping: Omit<PayrollMapping, 'id' | 'createdAt' | 'updatedAt'>, silent = false) => {
     try {
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        throw new Error('Organization ID is required');
+      }
+
       console.log('Sending mapping data:', mapping);
       
       const requestBody = {
@@ -344,14 +385,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         payroll_item_name: mapping.payrollItemName,
         ledger_head_id: mapping.ledgerHeadId,
         ledger_head_name: mapping.ledgerHeadName,
-        financial_year: mapping.financialYear
+        financial_year: mapping.financialYear,
+        org_id: org_id
       };
       console.log('Request body:', requestBody);
 
       const response = await fetch(`${LOCAL_API_URL}/payroll-mappings`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Org-Id': org_id
         },
         body: JSON.stringify(requestBody)
       });
@@ -411,6 +454,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         throw new Error('Mapping not found');
       }
 
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        throw new Error('Organization ID is required');
+      }
+
       // Merge the existing mapping with the updates
       const requestBody = {
         payroll_item_id: mapping.payrollItemId || existingMapping.payrollItemId,
@@ -418,14 +466,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ledger_head_id: mapping.ledgerHeadId || existingMapping.ledgerHeadId,
         ledger_head_name: mapping.ledgerHeadName || existingMapping.ledgerHeadName,
         financial_year: mapping.financialYear || existingMapping.financialYear,
+        org_id: org_id,
         updated_at: new Date().toISOString()
       };
       console.log('Sending update request:', { id, requestBody });
 
-      const response = await fetch(`${LOCAL_API_URL}/payroll-mappings/${id}`, {
+      const response = await fetch(`${LOCAL_API_URL}/payroll-mappings/${id}?org_id=${org_id}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Org-Id': org_id
         },
         body: JSON.stringify(requestBody)
       });

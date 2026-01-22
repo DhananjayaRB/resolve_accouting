@@ -83,15 +83,15 @@ export default async function handler(req, res) {
         { name: 'Purchase', code: 'PURCH001', category: 'Expense' },
       ];
 
-      // Save to database
+      // Save to database with org_id
       let savedCount = 0;
       for (const ledger of sampleLedgers) {
         try {
           await pool.query(
-            `INSERT INTO ledger (name, code, category, is_active, financial_year, created_at, updated_at)
-             VALUES ($1, $2, $3, true, $4, NOW(), NOW())
+            `INSERT INTO ledger (name, code, category, is_active, financial_year, org_id, created_at, updated_at)
+             VALUES ($1, $2, $3, true, $4, $5, NOW(), NOW())
              ON CONFLICT DO NOTHING`,
-            [ledger.name, ledger.code, ledger.category, '2024-25']
+            [ledger.name, ledger.code, ledger.category, '2024-25', orgId]
           );
           savedCount++;
         } catch (error) {

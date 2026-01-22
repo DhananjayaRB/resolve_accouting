@@ -5,11 +5,37 @@ dotenv.config();
 
 const { Pool } = pg;
 
+// Helper function to parse SSL mode from connection string
+function getSSLConfig(connectionString) {
+  if (!connectionString) return false;
+  
+  // Parse query parameters from connection string
+  const queryString = connectionString.split('?')[1];
+  if (queryString) {
+    const params = new URLSearchParams(queryString);
+    const sslMode = params.get('sslmode');
+    
+    // If sslmode=disable, don't use SSL
+    if (sslMode === 'disable') {
+      return false;
+    }
+    
+    // If sslmode=require, use SSL
+    if (sslMode === 'require') {
+      return { rejectUnauthorized: false };
+    }
+  }
+  
+  // Default: use SSL in production, no SSL in development
+  return process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false;
+}
+
 // Support both connection string (for Vercel Postgres) and individual config
-const poolConfig = process.env.DATABASE_URL || process.env.POSTGRES_URL
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const poolConfig = connectionString
   ? {
-      connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      connectionString: connectionString,
+      ssl: getSSLConfig(connectionString),
     }
   : {
       user: process.env.DB_USER || 'postgres',

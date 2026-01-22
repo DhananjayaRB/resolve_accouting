@@ -12,7 +12,8 @@ const migrations = [
   { file: '001_create_ledger_table.sql', path: '001_create_ledger_table.sql' },
   { file: '001_create_payroll_mappings.sql', path: '001_create_payroll_mappings.sql' },
   { file: '001_create_tally_push_logs.sql', path: path.resolve(__dirname, '../../src/server/migrations/001_create_tally_push_logs.sql') },
-  { file: '002_create_organization_tally_config.sql', path: '002_create_organization_tally_config.sql' }
+  { file: '002_create_organization_tally_config.sql', path: '002_create_organization_tally_config.sql' },
+  { file: '004_add_org_id_to_tables.sql', path: '004_add_org_id_to_tables.sql' }
 ];
 
 async function runMigrations() {

@@ -25,21 +25,31 @@ Add these in Vercel Dashboard → Settings → Environment Variables:
 
 ```bash
 # Database (choose one)
-DATABASE_URL=postgresql://user:pass@host:port/db
-# OR
-POSTGRES_URL=postgresql://user:pass@host:port/db
-# OR individual config
-DB_HOST=your-host
+# Production Database URL (with PgBouncer and SSL disabled)
+DATABASE_URL=postgres://postgres:resolve%402022@20.204.119.48:5432/resolve_accouting?sslmode=disable&pgbouncer=true
+
+# OR use POSTGRES_URL
+POSTGRES_URL=postgres://postgres:resolve%402022@20.204.119.48:5432/resolve_accouting?sslmode=disable&pgbouncer=true
+
+# OR individual config (fallback)
+DB_HOST=20.204.119.48
 DB_PORT=5432
-DB_NAME=your-db
-DB_USER=your-user
-DB_PASSWORD=your-password
+DB_NAME=resolve_accouting
+DB_USER=postgres
+DB_PASSWORD=resolve@2022
+
+# Required
+NODE_ENV=production
 
 # Optional
-NODE_ENV=production
 TALLY_IP=localhost
 TALLY_PORT=9000
 ```
+
+**Note:** The connection string includes:
+- `sslmode=disable` - SSL is disabled (config.js will respect this)
+- `pgbouncer=true` - Using PgBouncer for connection pooling
+- Password is URL-encoded: `resolve%402022` = `resolve@2022`
 
 ### 2. Database Migration
 

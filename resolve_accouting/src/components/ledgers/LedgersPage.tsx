@@ -106,9 +106,20 @@ const LedgersPage: React.FC = () => {
   const handleSyncFromTally = async () => {
     setIsSyncingFromTally(true);
     try {
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        toast.error('Organization ID is required');
+        setIsSyncingFromTally(false);
+        return;
+      }
+
       const response = await fetch('http://localhost:3001/api/tally/sync-ledgers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Org-Id': org_id
+        },
+        body: JSON.stringify({ org_id })
       });
 
       const data = await response.json();

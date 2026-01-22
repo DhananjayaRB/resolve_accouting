@@ -406,38 +406,41 @@ const MapForTally: React.FC = () => {
         setActiveStepIndex(1);
         setPushLogs(prev => [...prev, '✓ Connected to Tally server']);
       }
-      if (i === 5) {
+      if (i === 4) {
         setActiveStepIndex(2);
         setPushLogs(prev => [...prev, '✓ Validated payroll data']);
       }
-      if (i === 8) {
+      if (i === 6) {
         setActiveStepIndex(3);
         setPushLogs(prev => [...prev, '✓ Prepared XML payload']);
       }
-      if (i === 12) {
+      if (i === 9) {
         setActiveStepIndex(4);
         setPushLogs(prev => [...prev, '✓ Sending transactions to Tally...']);
       }
-      if (i === 15) {
+      if (i === 12) {
         setActiveStepIndex(5);
         setPushLogs(prev => [...prev, '✓ Processing ledger entries...']);
       }
-      if (i === 18) {
+      if (i === 14) {
         setActiveStepIndex(6);
         setPushLogs(prev => [...prev, '✓ Syncing pay head mappings...']);
       }
-      if (i === 19) {
-        setPushLogs(prev => [...prev, '✓ Finalizing sync...']);
-      }
-      if (i === 20) {
-        setActiveStepIndex(7);
+      
+      // Complete sync when reaching 100% (last iteration)
+      if (i === totalSteps || progress >= 100) {
+        setActiveStepIndex(syncSteps.length); // Mark all steps as completed (set to length so idx < activeStepIndex includes all steps)
         setSyncedTransactions(totalTransactions);
         setEstimatedTimeRemaining(0);
-        setPushLogs(prev => [...prev, '✓ Sync completed successfully!']);
+        setPushProgress(100);
+        setPushLogs(prev => [...prev, '✓ Finalizing sync...', '✓ Sync completed successfully!']);
         setPushStatus('completed');
+        setIsPushingToTally(false);
         if (!runInBackground) {
           toast.success('Successfully pushed to Tally!');
         }
+        // Break out of loop since we're done
+        break;
       }
     }
 
@@ -1154,6 +1157,48 @@ const MapForTally: React.FC = () => {
                                   }).format(payHeadSummary.reduce((sum, item) => sum + item.total, 0) / 100000)}L
                                 </div>
                                 <div className="text-xs text-gray-500 mt-1">Processed</div>
+                              </div>
+                            </div>
+
+                            {/* Sync Status - Show in completed state */}
+                            <div className="bg-white rounded-xl p-4 mb-6 border border-gray-200 shadow-lg flex-shrink-0">
+                              <h6 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 text-sm">
+                                <Clock size={16} className="text-green-600" />
+                                <span>Sync Status</span>
+                              </h6>
+                              <div className="space-y-2">
+                                {syncSteps.map((step, idx) => {
+                                  const isCompleted = pushStatus === 'completed' || idx < activeStepIndex;
+                                  return (
+                                    <div
+                                      key={step.id}
+                                      className={`flex items-center gap-3 p-2.5 rounded-lg transition-all ${
+                                        isCompleted
+                                          ? 'bg-green-50 border border-green-200'
+                                          : 'bg-gray-50 border border-gray-200'
+                                      }`}
+                                    >
+                                      <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                                        isCompleted
+                                          ? 'bg-green-500'
+                                          : 'bg-gray-300'
+                                      }`}>
+                                        {isCompleted ? (
+                                          <CheckCircle2 size={16} className="text-white" />
+                                        ) : (
+                                          <div className="w-2 h-2 bg-white rounded-full" />
+                                        )}
+                                      </div>
+                                      <span className={`text-sm font-medium flex-1 ${
+                                        isCompleted
+                                          ? 'text-green-800'
+                                          : 'text-gray-500'
+                                      }`}>
+                                        {step.label}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
 
