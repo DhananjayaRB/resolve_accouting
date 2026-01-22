@@ -19,7 +19,8 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_ledger_updated_at ON ledger;
 CREATE TRIGGER update_ledger_updated_at
     BEFORE UPDATE ON ledger
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column(); 
+    EXECUTE FUNCTION update_updated_at_column();

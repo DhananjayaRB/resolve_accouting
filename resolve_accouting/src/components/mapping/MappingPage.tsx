@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Link2, Filter, Search, Plus, Save, Trash2, Eye } from 'lucide-react';
+import { Link2, Filter, Search, Plus, Save, Trash2, Eye, Download, Upload, Zap } from 'lucide-react';
 import { PayrollItemType } from '../../types';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import InfoIcon from '../common/InfoIcon';
 
 interface PayrollItem {
   id: string;
@@ -38,6 +40,7 @@ const MappingPage: React.FC = () => {
   const [selectedLedgerHead, setSelectedLedgerHead] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isAutoMapping, setIsAutoMapping] = useState(false);
   
   // Filter active ledgers only
   const activeLedgerHeads = ledgerHeads.filter(ledger => ledger.isActive);
@@ -182,11 +185,297 @@ const MappingPage: React.FC = () => {
     }
   };
 
+  const handleDownloadExcel = () => {
+    try {
+      const data = filteredPayrollItems.map((item) => {
+        const mapping = getExistingMapping(item.id);
+        return {
+          'Payroll Item': item.name,
+          'Type': item.type,
+          'Mapped Ledger': mapping?.ledgerHeadName || '',
+          'Ledger ID': mapping?.ledgerHeadId || '',
+          'Financial Year': mapping?.financialYear || '',
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Payroll Mappings');
+      XLSX.writeFile(wb, `payroll_mappings_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Excel file downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      toast.error('Failed to download Excel file');
+    }
+  };
+
+  // Calculate string similarity using Levenshtein distance
+  const calculateSimilarity = (str1: string, str2: string): number => {
+    const s1 = str1.toLowerCase().trim();
+    const s2 = str2.toLowerCase().trim();
+    
+    // Exact match
+    if (s1 === s2) return 1.0;
+    
+    // Check if one contains the other
+    if (s1.includes(s2) || s2.includes(s1)) {
+      return 0.8;
+    }
+    
+    // Check for common words
+    const words1 = s1.split(/\s+/);
+    const words2 = s2.split(/\s+/);
+    const commonWords = words1.filter(w => words2.includes(w) && w.length > 2);
+    if (commonWords.length > 0) {
+      const similarity = commonWords.length / Math.max(words1.length, words2.length);
+      return similarity * 0.7;
+    }
+    
+    // Calculate Levenshtein distance
+    const len1 = s1.length;
+    const len2 = s2.length;
+    const matrix: number[][] = [];
+    
+    for (let i = 0; i <= len1; i++) {
+      matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= len2; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        if (s1[i - 1] === s2[j - 1]) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + 1
+          );
+        }
+      }
+    }
+    
+    const distance = matrix[len1][len2];
+    const maxLen = Math.max(len1, len2);
+    return 1 - (distance / maxLen);
+  };
+
+  // Find best matching ledger for a payroll item
+  const findBestMatch = (payrollItemName: string, payrollItemType: PayrollItemType): { ledger: LedgerHead; score: number } | null => {
+    let bestMatch: { ledger: LedgerHead; score: number } | null = null;
+    let bestScore = 0;
+
+    for (const ledger of activeLedgerHeads) {
+      // Skip if ledger is already mapped to another item
+      const isMapped = payrollMappings.some(m => m.ledgerHeadId === ledger.id);
+      if (isMapped) continue;
+
+      // Calculate similarity score
+      const nameScore = calculateSimilarity(payrollItemName, ledger.name);
+      
+      // Boost score if category matches expected type
+      let typeBonus = 0;
+      if (payrollItemType === 'Earning' && (ledger.category === 'Expense' || ledger.name.toLowerCase().includes('salary'))) {
+        typeBonus = 0.2;
+      } else if (payrollItemType === 'Deduction' && (ledger.category === 'Liability' || ledger.name.toLowerCase().includes('deduction'))) {
+        typeBonus = 0.2;
+      } else if (payrollItemType === 'Asset' && ledger.category === 'Asset') {
+        typeBonus = 0.2;
+      } else if (payrollItemType === 'Liability' && ledger.category === 'Liability') {
+        typeBonus = 0.2;
+      }
+
+      const totalScore = nameScore + typeBonus;
+
+      if (totalScore > bestScore && totalScore >= 0.3) { // Minimum threshold of 30% similarity
+        bestScore = totalScore;
+        bestMatch = { ledger, score: totalScore };
+      }
+    }
+
+    return bestMatch;
+  };
+
+  // Auto map all unmapped payroll items
+  const handleAutoMap = async () => {
+    if (!window.confirm('This will automatically map unmapped payroll items to similar ledger heads. Continue?')) {
+      return;
+    }
+
+    setIsAutoMapping(true);
+    let mappedCount = 0;
+    let skippedCount = 0;
+    const mappingResults: Array<{ payrollItem: string; ledger: string; score: number }> = [];
+
+    try {
+      // Get all unmapped payroll items
+      const unmappedItems = payrollItems.filter(item => {
+        const existingMapping = getExistingMapping(item.id);
+        return !existingMapping;
+      });
+
+      if (unmappedItems.length === 0) {
+        toast.info('All payroll items are already mapped');
+        setIsAutoMapping(false);
+        return;
+      }
+
+      // Map each unmapped item
+      for (const item of unmappedItems) {
+        const match = findBestMatch(item.name, item.type);
+        
+        if (match && match.score >= 0.3) {
+          try {
+            await addPayrollMapping({
+              payrollItemId: item.id,
+              payrollItemName: item.name,
+              ledgerHeadId: match.ledger.id,
+              ledgerHeadName: match.ledger.name,
+              financialYear: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)
+            }, true); // Silent mode - don't show individual toasts
+            mappedCount++;
+            mappingResults.push({
+              payrollItem: item.name,
+              ledger: match.ledger.name,
+              score: match.score
+            });
+          } catch (error) {
+            console.error(`Error mapping ${item.name}:`, error);
+            skippedCount++;
+          }
+        } else {
+          skippedCount++;
+        }
+      }
+
+      // Show single summary toast
+      if (mappedCount > 0) {
+        toast.success(`Auto-mapped ${mappedCount} payroll item${mappedCount > 1 ? 's' : ''} successfully${skippedCount > 0 ? `. ${skippedCount} item${skippedCount > 1 ? 's' : ''} skipped` : ''}`);
+        
+        // Log detailed results to console
+        console.log('Auto-mapping results:', mappingResults);
+      } else {
+        toast.info('No suitable matches found for unmapped items');
+      }
+    } catch (error) {
+      console.error('Error during auto-mapping:', error);
+      toast.error('Error during auto-mapping');
+    } finally {
+      setIsAutoMapping(false);
+    }
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row: any of jsonData) {
+          try {
+            const payrollItemName = row['Payroll Item'] || row['Payroll Item Name'] || row.payrollItem;
+            const ledgerName = row['Mapped Ledger'] || row['Ledger'] || row.ledgerHeadName;
+            const ledgerId = row['Ledger ID'] || row.ledgerHeadId;
+
+            if (!payrollItemName || !ledgerName) {
+              errorCount++;
+              continue;
+            }
+
+            const payrollItem = payrollItems.find(item => item.name === payrollItemName);
+            const ledgerHead = activeLedgerHeads.find(head => 
+              head.name === ledgerName || head.id === ledgerId
+            );
+
+            if (!payrollItem || !ledgerHead) {
+              errorCount++;
+              continue;
+            }
+
+            const existingMapping = getExistingMapping(payrollItem.id);
+            if (existingMapping) {
+              await updatePayrollMapping(existingMapping.id, {
+                ledgerHeadId: ledgerHead.id,
+                ledgerHeadName: ledgerHead.name,
+              });
+            } else {
+              await addPayrollMapping({
+                payrollItemId: payrollItem.id,
+                payrollItemName: payrollItem.name,
+                ledgerHeadId: ledgerHead.id,
+                ledgerHeadName: ledgerHead.name,
+                financialYear: row['Financial Year'] || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+              });
+            }
+            successCount++;
+          } catch (error) {
+            console.error('Error importing row:', row, error);
+            errorCount++;
+          }
+        }
+
+        toast.success(`Imported ${successCount} mappings${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+        e.target.value = ''; // Reset input
+      } catch (error) {
+        console.error('Error importing Excel:', error);
+        toast.error('Failed to import Excel file');
+        e.target.value = ''; // Reset input
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800"></h2>
-      </div> ledg
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-gray-800">Payroll Mapping</h2>
+          <InfoIcon
+            title="Payroll Mapping"
+            content="Map payroll items (salary components) to ledger heads for accounting integration. This mapping determines how payroll transactions are recorded in your accounting system when synced to Tally."
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleAutoMap}
+            disabled={isAutoMapping || payrollItems.length === 0 || activeLedgerHeads.length === 0}
+            className="btn btn-primary flex items-center"
+            title="Auto Map based on similar names"
+          >
+            <Zap size={18} className={`mr-1 ${isAutoMapping ? 'animate-pulse' : ''}`} />
+            {isAutoMapping ? 'Auto Mapping...' : 'Auto Map'}
+          </button>
+          <button
+            onClick={handleDownloadExcel}
+            className="btn btn-secondary flex items-center"
+            title="Download as Excel"
+          >
+            <Download size={18} className="mr-1" /> Download Excel
+          </button>
+          <label className="btn btn-secondary flex items-center cursor-pointer" title="Import from Excel">
+            <Upload size={18} className="mr-1" /> Import Excel
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImportExcel}
+              className="hidden"
+            />
+          </label>
+        </div>
+      </div>
       
       <div className="card p-4 mb-6">
         <p className="text-gray-600">
@@ -225,17 +514,17 @@ const MappingPage: React.FC = () => {
       </div>
       
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="table-container">
+        <table className="table">
+          <thead className="table-header">
             <tr>
-              <th className="table-header">Payroll Item</th>
-              <th className="table-header">Type</th>
-              <th className="table-header">Mapped Ledger</th>
-              <th className="table-header">Actions</th>
+              <th className="table-header-cell">Payroll Item</th>
+              <th className="table-header-cell">Type</th>
+              <th className="table-header-cell">Mapped Ledger</th>
+              <th className="table-header-cell">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="table-body">
             {filteredPayrollItems.length === 0 ? (
               <tr>
                 <td colSpan={4} className="table-cell text-center py-4 text-gray-500">
@@ -247,7 +536,7 @@ const MappingPage: React.FC = () => {
                 const existingMapping = getExistingMapping(item.id);
                 console.log('Rendering item:', item.name, 'with mapping:', existingMapping);
                 return (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr key={item.id} className="table-row">
                     <td className="table-cell">
                       <div>
                         <span className="font-medium text-gray-900">{item.name}</span>
@@ -260,7 +549,7 @@ const MappingPage: React.FC = () => {
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           item.type === 'Earning'
-                            ? 'bg-success-100 text-success-800'
+                            ? 'bg-secondary-100 text-secondary-800'
                             : item.type === 'Deduction'
                             ? 'bg-error-100 text-error-800'
                             : item.type === 'Asset'

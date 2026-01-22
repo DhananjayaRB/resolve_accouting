@@ -80,7 +80,7 @@ const Header: React.FC = () => {
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            <h1 className="text-xl font-semibold text-primary-900">
+            <h1 className="text-xl font-semibold" style={{ color: '#0A1A33' }}>
               {getPageTitle()}
             </h1>
           </div>
@@ -90,7 +90,7 @@ const Header: React.FC = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDropdown(!showDropdown)}
-                  className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors px-3 py-2 rounded-md hover:bg-gray-50"
+                  className="flex items-center space-x-1 text-gray-700 hover:text-secondary-600 transition-colors px-3 py-2 rounded-md hover:bg-gray-50"
                 >
                   <span>Switch To</span>
                   <ChevronDown size={16} className={`transform transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
@@ -102,7 +102,7 @@ const Header: React.FC = () => {
                       <a
                         key={module.name}
                         href={module.path}
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-secondary-600"
                       >
                         {module.name}
                       </a>
@@ -112,10 +112,10 @@ const Header: React.FC = () => {
               </div>
             )}
 
-            <button className="text-gray-500 hover:text-primary-600 transition-colors p-2">
+            <button className="text-gray-500 hover:text-secondary-600 transition-colors p-2">
               <Bell className="h-5 w-5" />
             </button>
-            <button className="text-gray-500 hover:text-primary-600 transition-colors p-2">
+            <button className="text-gray-500 hover:text-secondary-600 transition-colors p-2">
               <HelpCircle className="h-5 w-5" />
             </button>
             <div className="flex items-center border-l border-gray-200 pl-4">

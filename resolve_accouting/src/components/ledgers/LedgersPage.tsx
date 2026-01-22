@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { LedgerCategory } from '../../types';
-import { Plus, Filter, Search, Edit, Trash2, Eye, Power } from 'lucide-react';
+import { Plus, Filter, Search, Edit, Trash2, Eye, Power, Download, Upload, RefreshCw } from 'lucide-react';
 import LedgerForm from './LedgerForm';
 import { getStoredToken } from '../../utils/auth';
+import * as XLSX from 'xlsx';
+import toast from 'react-hot-toast';
+import InfoIcon from '../common/InfoIcon';
+import Loader from '../common/Loader';
 
 const LedgersPage: React.FC = () => {
-  const { ledgerHeads, updateLedgerHead, deleteLedgerHead } = useApp();
+  const { ledgerHeads, updateLedgerHead, deleteLedgerHead, addLedgerHead } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedLedger, setSelectedLedger] = useState<any>(null);
@@ -16,6 +20,7 @@ const LedgersPage: React.FC = () => {
   const [editingLedger, setEditingLedger] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [financialYears, setFinancialYears] = useState<any[]>([]);
+  const [isSyncingFromTally, setIsSyncingFromTally] = useState(false);
 
   useEffect(() => {
     console.log('Current ledger heads:', ledgerHeads);
@@ -98,6 +103,183 @@ const LedgersPage: React.FC = () => {
     setSelectedLedger(null);
   };
 
+  const handleSyncFromTally = async () => {
+    setIsSyncingFromTally(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/tally/sync-ledgers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(`Successfully synced ${data.count || 0} ledger heads from Tally`);
+        // Refresh the ledger heads list
+        window.location.reload(); // Simple refresh, or you can call a refresh function
+      } else {
+        toast.error(data.message || 'Failed to sync from Tally');
+      }
+    } catch (error) {
+      console.error('Error syncing from Tally:', error);
+      toast.error('Error syncing from Tally. Please try again.');
+    } finally {
+      setIsSyncingFromTally(false);
+    }
+  };
+
+  const handleDownloadExcel = () => {
+    try {
+      // If there are ledgers, export them; otherwise create a template
+      const data = filteredLedgers.length > 0 
+        ? filteredLedgers.map((ledger) => ({
+            'Name': ledger.name,
+            'Code': ledger.code || '',
+            'Category': ledger.category,
+            'Status': ledger.isActive ? 'Active' : 'Inactive',
+            'Financial Year': ledger.financialYear || '',
+            'Description': ledger.description || '',
+          }))
+        : [
+            // Template with example row
+            {
+              'Name': 'Example Ledger',
+              'Code': 'EX001',
+              'Category': 'Expense',
+              'Status': 'Active',
+              'Financial Year': '',
+              'Description': 'Example description',
+            }
+          ];
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      
+      // Set column widths for better readability
+      const colWidths = [
+        { wch: 30 }, // Name
+        { wch: 15 }, // Code
+        { wch: 15 }, // Category
+        { wch: 12 }, // Status
+        { wch: 15 }, // Financial Year
+        { wch: 30 }, // Description
+      ];
+      ws['!cols'] = colWidths;
+      
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ledger Heads');
+      
+      const fileName = filteredLedgers.length > 0
+        ? `ledger_heads_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `ledger_template.xlsx`;
+      
+      XLSX.writeFile(wb, fileName);
+      toast.success(filteredLedgers.length > 0 
+        ? 'Excel file downloaded successfully' 
+        : 'Template downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      toast.error('Failed to download Excel file');
+    }
+  };
+
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        if (jsonData.length === 0) {
+          toast.error('Excel file is empty');
+          e.target.value = '';
+          return;
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+        const errors: string[] = [];
+
+        // Process rows in batches to avoid overwhelming the UI
+        for (const row: any of jsonData) {
+          try {
+            // Normalize column names (handle various formats)
+            const name = row.Name || row.name || row['Ledger Name'] || '';
+            const code = row.Code || row.code || row['Ledger Code'] || '';
+            const category = (row.Category || row.category || 'Expense') as LedgerCategory;
+            const status = row.Status || row.status || 'Active';
+            const financialYear = row['Financial Year'] || row['FinancialYear'] || row.financialYear || row['Financial Year'] || '';
+            const description = row.Description || row.description || '';
+
+            // Validate required fields
+            if (!name || name.trim() === '') {
+              errors.push(`Row ${successCount + errorCount + 1}: Name is required`);
+              errorCount++;
+              continue;
+            }
+
+            // Validate category
+            const validCategories: LedgerCategory[] = ['Asset', 'Liability', 'Expense', 'Income'];
+            const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+            if (!validCategories.includes(normalizedCategory as LedgerCategory)) {
+              errors.push(`Row ${successCount + errorCount + 1}: Invalid category "${category}". Must be one of: Asset, Liability, Expense, Income`);
+              errorCount++;
+              continue;
+            }
+
+            // Determine active status
+            const isActive = status === 'Active' || status === 'active' || status === 'TRUE' || status === true || status === '';
+
+            await addLedgerHead({
+              name: name.trim(),
+              code: code ? code.trim() : '',
+              category: normalizedCategory as LedgerCategory,
+              isActive,
+              financialYear: financialYear ? financialYear.toString().trim() : '',
+              description: description ? description.toString().trim() : '',
+            }, true); // Silent mode for bulk import
+            successCount++;
+          } catch (error: any) {
+            console.error('Error importing row:', row, error);
+            errors.push(`Row ${successCount + errorCount + 1}: ${error.message || 'Failed to create ledger'}`);
+            errorCount++;
+          }
+        }
+
+        // Show summary toast
+        if (successCount > 0) {
+          toast.success(`Imported ${successCount} ledger${successCount > 1 ? 's' : ''} successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+        }
+        
+        // Show errors if any (but limit to avoid spam)
+        if (errorCount > 0 && errors.length > 0) {
+          const errorMessage = errors.length > 5 
+            ? `${errors.slice(0, 5).join('; ')}... and ${errors.length - 5} more errors`
+            : errors.join('; ');
+          console.error('Import errors:', errors);
+          // Only show first few errors in toast to avoid spam
+          if (errors.length <= 3) {
+            errors.forEach(err => toast.error(err));
+          } else {
+            toast.error(`${errorCount} rows failed. Check console for details.`);
+          }
+        }
+
+        e.target.value = ''; // Reset input
+      } catch (error) {
+        console.error('Error importing Excel:', error);
+        toast.error('Failed to import Excel file. Please check the file format.');
+        e.target.value = ''; // Reset input
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const filteredLedgers = ledgerHeads
     .filter((ledger) => showInactive || ledger.isActive)
     .filter((ledger) => filter === 'All' || ledger.category === filter)
@@ -120,19 +302,64 @@ const LedgersPage: React.FC = () => {
     });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col animate-fade-in relative">
+      {/* Show loader overlay when syncing */}
+      {isSyncingFromTally && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+          <Loader 
+            message="Syncing Ledgers from Tally..."
+            subMessage="Please wait while we fetch ledger heads"
+            size="md"
+            variant="compact"
+          />
+        </div>
+      )}
+      
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Ledger Heads Management</h2>
-        <button
-          onClick={() => setShowForm(true)}
-          className="btn btn-primary flex items-center"
-        >
-          <Plus size={18} className="mr-1" /> Add Ledger Head
-        </button>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-gray-800">Ledger Heads Management</h2>
+          <InfoIcon
+            title="Ledger Heads Management"
+            content="Manage your chart of accounts. Create, edit, and organize ledger heads by category (Asset, Liability, Expense, Income). Sync ledger heads directly from Tally or import/export via Excel."
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleDownloadExcel}
+            className="btn btn-secondary flex items-center"
+            title="Download as Excel"
+          >
+            <Download size={18} className="mr-1" /> Download Excel
+          </button>
+          <label className="btn btn-secondary flex items-center cursor-pointer" title="Import from Excel">
+            <Upload size={18} className="mr-1" /> Import Excel
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImportExcel}
+              className="hidden"
+            />
+          </label>
+          <button
+            onClick={handleSyncFromTally}
+            disabled={isSyncingFromTally}
+            className="btn btn-secondary flex items-center"
+            title="Sync Ledger Heads from Tally"
+          >
+            <RefreshCw size={18} className={`mr-1 ${isSyncingFromTally ? 'animate-spin' : ''}`} />
+            {isSyncingFromTally ? 'Syncing...' : 'Sync from Tally'}
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="btn btn-primary flex items-center"
+          >
+            <Plus size={18} className="mr-1" /> Add Ledger Head
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-4 items-center">
+      <div className="flex flex-wrap gap-4 items-center flex-shrink-0">
         <div className="flex items-center bg-white rounded-lg border border-gray-200 px-3 py-2 flex-grow max-w-md">
           <Search size={18} className="text-gray-400 mr-2" />
           <input
@@ -173,8 +400,8 @@ const LedgersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Ledger Table */}
-      <div className="table-container">
+      {/* Ledger Table - Scrollable */}
+      <div className="table-container custom-scrollbar">
         <table className="table">
           <thead className="table-header">
             <tr>
@@ -202,7 +429,7 @@ const LedgersPage: React.FC = () => {
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         ledger.category === 'Asset'
-                          ? 'bg-success-100 text-success-800'
+                          ? 'bg-secondary-100 text-secondary-800'
                           : ledger.category === 'Liability'
                           ? 'bg-warning-100 text-warning-800'
                           : ledger.category === 'Expense'
@@ -217,7 +444,7 @@ const LedgersPage: React.FC = () => {
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         ledger.isActive
-                          ? 'bg-success-100 text-success-800'
+                          ? 'bg-secondary-100 text-secondary-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}
                     >

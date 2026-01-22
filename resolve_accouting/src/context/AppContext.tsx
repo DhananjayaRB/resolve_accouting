@@ -14,9 +14,9 @@ import {
 import toast from 'react-hot-toast';
 import { getStoredToken } from '../utils/auth';
 
-// Update API URLs
+// API URLs
 const LOCAL_API_URL = 'http://localhost:3001/api';
-const UAT_API_URL = 'https://uat-api.resolveindia.com';
+const UAT_API_URL = 'https://apiv1.resolvepay.in';
 
 interface PayrollMapping {
   id: string;
@@ -41,7 +41,7 @@ interface AppContextType {
   
   // Mappings
   payrollMappings: PayrollMapping[];
-  addPayrollMapping: (mapping: Omit<PayrollMapping, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  addPayrollMapping: (mapping: Omit<PayrollMapping, 'id' | 'createdAt' | 'updatedAt'>, silent?: boolean) => Promise<void>;
   updatePayrollMapping: (id: string, mapping: Partial<PayrollMapping>) => Promise<void>;
   deletePayrollMapping: (id: string) => Promise<void>;
   
@@ -190,14 +190,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Ledger Head Functions
-  const addLedgerHead = async (ledgerHead: Omit<LedgerHead, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addLedgerHead = async (ledgerHead: Omit<LedgerHead, 'id' | 'createdAt' | 'updatedAt'>, silent = false) => {
     try {
+      // Validate required fields
+      if (!ledgerHead.name || ledgerHead.name.trim() === '') {
+        throw new Error('Ledger name is required');
+      }
+
+      if (!ledgerHead.category) {
+        throw new Error('Ledger category is required');
+      }
+
       // Transform the data to match the API's expected format
-      const requestBody = {
-        ...ledgerHead,
-        is_active: ledgerHead.isActive,
-        financial_year: ledgerHead.financialYear
+      const requestBody: any = {
+        name: ledgerHead.name.trim(),
+        code: ledgerHead.code?.trim() || null,
+        category: ledgerHead.category,
+        is_active: ledgerHead.isActive !== undefined ? ledgerHead.isActive : true,
+        financial_year: ledgerHead.financialYear?.trim() || null,
+        description: ledgerHead.description?.trim() || null,
       };
+
+      // Remove null values to avoid sending them
+      Object.keys(requestBody).forEach(key => {
+        if (requestBody[key] === null || requestBody[key] === '') {
+          delete requestBody[key];
+        }
+      });
 
       const response = await fetch(`${LOCAL_API_URL}/ledgers`, {
         method: 'POST',
@@ -207,7 +226,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify(requestBody),
       });
 
-      if (!response.ok) throw new Error('Failed to create ledger');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to create ledger' }));
+        throw new Error(errorData.error || errorData.message || 'Failed to create ledger');
+      }
       
       const newLedger = await response.json();
       
@@ -226,10 +248,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
 
       setLedgerHeads([...ledgerHeads, transformedLedger]);
-      toast.success('Ledger created successfully');
-    } catch (error) {
+      
+      // Only show toast if not in silent mode (for bulk imports)
+      if (!silent) {
+        toast.success('Ledger created successfully');
+      }
+      
+      return transformedLedger;
+    } catch (error: any) {
       console.error('Error creating ledger:', error);
-      toast.error('Failed to create ledger');
+      if (!silent) {
+        toast.error(error.message || 'Failed to create ledger');
+      }
+      throw error; // Re-throw so caller can handle it
     }
   };
 
@@ -304,7 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Payroll Mapping Functions
-  const addPayrollMapping = async (mapping: Omit<PayrollMapping, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addPayrollMapping = async (mapping: Omit<PayrollMapping, 'id' | 'createdAt' | 'updatedAt'>, silent = false) => {
     try {
       console.log('Sending mapping data:', mapping);
       
@@ -356,11 +387,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
 
       setPayrollMappings(prev => [...prev, transformedMapping]);
-      toast.success('Payroll mapping created successfully');
+      
+      // Only show toast if not in silent mode (for bulk operations like Auto Map)
+      if (!silent) {
+        toast.success('Payroll mapping created successfully');
+      }
+      
       return transformedMapping;
     } catch (error) {
       console.error('Error creating payroll mapping:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create payroll mapping');
+      if (!silent) {
+        toast.error(error instanceof Error ? error.message : 'Failed to create payroll mapping');
+      }
       throw error;
     }
   };

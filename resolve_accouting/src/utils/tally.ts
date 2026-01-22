@@ -319,7 +319,7 @@ export const pushToTally = async (): Promise<boolean> => {
  </BODY>
 </ENVELOPE>`;
 
-    const response = await fetch('https://uat-api.resolveindia.com/organization/import-to-tally', {
+    const response = await fetch('https://apiv1.resolvepay.in/organization/import-to-tally', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
