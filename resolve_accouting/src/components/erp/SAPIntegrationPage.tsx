@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Server, CheckCircle2, XCircle, RefreshCw, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
+import InfoIcon from '../common/InfoIcon';
 
 const SAPIntegrationPage: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -23,32 +24,35 @@ const SAPIntegrationPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-800">SAP Integration</h2>
-        <p className="text-gray-600 mt-1">Manage SAP ERP integration and data synchronization</p>
+      <div className="flex items-center gap-2">
+        <h2 className="text-2xl font-light text-gray-800">SAP Integration</h2>
+        <InfoIcon
+          title="SAP ERP Integration"
+          content="Connect and sync your accounting data with SAP ERP. Configure connection settings, map data fields, and manage synchronization schedules."
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">Connection Status</h3>
+            <h3 className="text-lg font-light text-gray-800">Connection Status</h3>
             <div className={`flex items-center gap-2 ${isConnected ? 'text-secondary-600' : 'text-gray-400'}`}>
               {isConnected ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
-              <span className="text-sm font-medium">{sampleData.connectionStatus}</span>
+              <span className="text-sm font-light">{sampleData.connectionStatus}</span>
             </div>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-gray-600">Last Sync:</span>
-              <span className="font-medium">{sampleData.lastSync}</span>
+              <span className="font-light">{sampleData.lastSync}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Total Records:</span>
-              <span className="font-medium">{sampleData.totalRecords.toLocaleString()}</span>
+              <span className="text-gray-600 font-light">Total Records:</span>
+              <span className="font-light">{sampleData.totalRecords.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Sync Frequency:</span>
-              <span className="font-medium">{sampleData.syncFrequency}</span>
+              <span className="text-gray-600 font-light">Sync Frequency:</span>
+              <span className="font-light">{sampleData.syncFrequency}</span>
             </div>
           </div>
           <button
@@ -62,18 +66,18 @@ const SAPIntegrationPage: React.FC = () => {
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Configuration</h3>
+          <h3 className="text-lg font-light text-gray-800 mb-4">Configuration</h3>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">SAP Server</label>
+              <label className="block text-sm font-light text-gray-700 mb-1">SAP Server</label>
               <input type="text" className="input w-full" defaultValue="sap.company.com" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+              <label className="block text-sm font-light text-gray-700 mb-1">Client</label>
               <input type="text" className="input w-full" defaultValue="100" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">System Number</label>
+              <label className="block text-sm font-light text-gray-700 mb-1">System Number</label>
               <input type="text" className="input w-full" defaultValue="00" />
             </div>
             <button className="btn btn-secondary w-full flex items-center justify-center">

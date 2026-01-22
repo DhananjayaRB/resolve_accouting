@@ -99,10 +99,36 @@ const Sidebar: React.FC = () => {
           ],
         },
         {
+          name: 'Zoho',
+          icon: <Building2 size={18} />,
+          children: [
+            { name: 'Connection Setup', to: '/zoho/connection', icon: <Plug size={16} /> },
+            { name: 'Data Mapping', to: '/zoho/mapping', icon: <FolderTree size={16} /> },
+            { name: 'Sync Logs', to: '/zoho/logs', icon: <FileBarChart size={16} /> },
+          ],
+        },
+        {
+          name: 'DarwinBox',
+          icon: <Users size={18} />,
+          children: [
+            { name: 'Connection Setup', to: '/darwinbox/connection', icon: <Plug size={16} /> },
+            { name: 'Data Mapping', to: '/darwinbox/mapping', icon: <FolderTree size={16} /> },
+            { name: 'Sync Logs', to: '/darwinbox/logs', icon: <FileBarChart size={16} /> },
+          ],
+        },
+        {
+          name: 'SAP',
+          icon: <Server size={18} />,
+          children: [
+            { name: 'Connection Setup', to: '/sap/connection', icon: <Plug size={16} /> },
+            { name: 'Data Mapping', to: '/sap/mapping', icon: <FolderTree size={16} /> },
+            { name: 'Sync Logs', to: '/sap/logs', icon: <FileBarChart size={16} /> },
+          ],
+        },
+        {
           name: 'Other ERPs',
           icon: <Building2 size={18} />,
           children: [
-            { name: 'SAP', to: '/erp/sap', icon: <Server size={16} /> },
             { name: 'Custom API', to: '/erp/custom', icon: <Code size={16} /> },
           ],
         },
