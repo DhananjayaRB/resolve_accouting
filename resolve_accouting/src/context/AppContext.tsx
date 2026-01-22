@@ -12,7 +12,7 @@ import {
   mockPayrollJournals
 } from '../data/mockData';
 import toast from 'react-hot-toast';
-import { getStoredToken } from '../utils/auth';
+import { getStoredToken, getStoredUserInfo } from '../utils/auth';
 
 // API URLs
 const LOCAL_API_URL = 'http://localhost:3001/api';
