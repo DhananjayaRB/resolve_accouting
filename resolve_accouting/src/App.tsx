@@ -25,7 +25,7 @@ import ExpenseSyncLogsPage from './components/expenses/ExpenseSyncLogsPage';
 import { FundMappingPage, DonorLedgersPage, UtilizationReportsPage, ComplianceExportPage } from './components/ngo/NGOPages';
 import { JournalsPage, TrialBalancePage } from './components/accounting/AccountingPages';
 import { SyncSummaryPage, ErrorReportsPage, AuditLogsPage, ExportReportsPage } from './components/reports/ReportsPages';
-import { OrganizationSettingsPage, UsersRolesPage, PermissionsPage, NotificationsPage, APIKeysPage } from './components/settings/SettingsPages';
+import { OrganizationSettingsPage, UsersRolesPage, PermissionsPage, NotificationsPage, APIKeysPage, UIPreferencesPage } from './components/settings/SettingsPages';
 import { Toaster } from 'react-hot-toast';
 import { storeTokenFromUrl } from './utils/auth';
 
@@ -90,6 +90,7 @@ function App() {
             <Route path="settings/users" element={<UsersRolesPage />} />
             <Route path="settings/permissions" element={<PermissionsPage />} />
             <Route path="settings/notifications" element={<NotificationsPage />} />
+            <Route path="settings/ui-preferences" element={<UIPreferencesPage />} />
             <Route path="settings/api-keys" element={<APIKeysPage />} />
             
             {/* Legacy routes for backward compatibility */}

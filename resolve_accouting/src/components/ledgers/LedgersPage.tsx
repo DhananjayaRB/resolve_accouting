@@ -5,7 +5,8 @@ import { LedgerCategory } from '../../types';
 import { Plus, Filter, Search, Edit, Trash2, Eye, Power, Download, Upload, RefreshCw } from 'lucide-react';
 import LedgerForm from './LedgerForm';
 import { getStoredToken } from '../../utils/auth';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
+import { styleHeaderRow, styleTitleCell, createStyledWorksheet } from '../../utils/excelStyles';
 import toast from 'react-hot-toast';
 import InfoIcon from '../common/InfoIcon';
 import Loader from '../common/Loader';
@@ -141,52 +142,131 @@ const LedgersPage: React.FC = () => {
 
   const handleDownloadExcel = () => {
     try {
-      // If there are ledgers, export them; otherwise create a template
-      const data = filteredLedgers.length > 0 
-        ? filteredLedgers.map((ledger) => ({
-            'Name': ledger.name,
-            'Code': ledger.code || '',
-            'Category': ledger.category,
-            'Status': ledger.isActive ? 'Active' : 'Inactive',
-            'Financial Year': ledger.financialYear || '',
-            'Description': ledger.description || '',
-          }))
-        : [
-            // Template with example row
-            {
-              'Name': 'Example Ledger',
-              'Code': 'EX001',
-              'Category': 'Expense',
-              'Status': 'Active',
-              'Financial Year': '',
-              'Description': 'Example description',
-            }
-          ];
-
-      const ws = XLSX.utils.json_to_sheet(data);
-      
-      // Set column widths for better readability
-      const colWidths = [
-        { wch: 30 }, // Name
-        { wch: 15 }, // Code
-        { wch: 15 }, // Category
-        { wch: 12 }, // Status
-        { wch: 15 }, // Financial Year
-        { wch: 30 }, // Description
-      ];
-      ws['!cols'] = colWidths;
-      
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Ledger Heads');
       
-      const fileName = filteredLedgers.length > 0
-        ? `ledger_heads_${new Date().toISOString().split('T')[0]}.xlsx`
-        : `ledger_template.xlsx`;
+      // ===== INSTRUCTIONS SHEET =====
+      const instructionsData = [
+        ['LEDGER IMPORT TEMPLATE - INSTRUCTIONS'],
+        [''],
+        ['HOW TO USE THIS TEMPLATE:'],
+        ['1. Go to the "Ledgers" sheet to add your ledger entries'],
+        ['2. Use the "Masters" sheet to see available dropdown values'],
+        ['3. Fill in the required fields: Name, Category, Status'],
+        ['4. Optional fields: Code, Financial Year, Description'],
+        [''],
+        ['FIELD DESCRIPTIONS:'],
+        ['• Name: Ledger name (Required) - e.g., "Cash", "Sales", "Rent Expense"'],
+        ['• Code: Ledger code (Optional) - e.g., "CASH001", "SALES001"'],
+        ['• Category: Select from dropdown (Required) - Asset, Liability, Expense, Income'],
+        ['• Status: Select from dropdown (Required) - Active or Inactive'],
+        ['• Financial Year: Financial year (Optional) - e.g., "2024-25", "2025-26"'],
+        ['• Description: Additional notes (Optional)'],
+        [''],
+        ['VALIDATION RULES:'],
+        ['• Category must be one of: Asset, Liability, Expense, Income'],
+        ['• Status must be one of: Active, Inactive'],
+        ['• Name cannot be empty'],
+        [''],
+        ['IMPORTANT NOTES:'],
+        ['• Delete the example row before adding your data'],
+        ['• Do not modify the "Masters" sheet'],
+        ['• Save the file before importing'],
+        ['• You can add multiple ledger entries in the same file'],
+        [''],
+        ['SUPPORT:'],
+        ['For assistance, contact your system administrator'],
+      ];
+      
+      const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
+      wsInstructions['!cols'] = [{ wch: 80 }];
+      // Style the title
+      if (wsInstructions['A1']) {
+        styleTitleCell(wsInstructions, 'A1');
+      }
+      XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+      
+      // ===== MASTERS SHEET =====
+      const mastersData = [
+        ['MASTER VALUES - Use these for dropdowns'],
+        [''],
+        ['CATEGORIES'],
+        ['Asset'],
+        ['Liability'],
+        ['Expense'],
+        ['Income'],
+        [''],
+        ['STATUS VALUES'],
+        ['Active'],
+        ['Inactive'],
+        [''],
+        ['COMMON FINANCIAL YEARS'],
+        ['2024-25'],
+        ['2025-26'],
+        ['2026-27'],
+        [''],
+        ['COMMON LEDGER CODES'],
+        ['CASH001 - Cash'],
+        ['BANK001 - Bank Account'],
+        ['SALES001 - Sales'],
+        ['PURCH001 - Purchase'],
+        ['SALARY001 - Salary'],
+        ['RENT001 - Rent'],
+        [''],
+        ['TIPS:'],
+        ['• Copy values from this sheet to paste into the Ledgers sheet'],
+        ['• Use consistent naming conventions'],
+        ['• Keep codes unique and meaningful'],
+      ];
+      
+      const wsMasters = XLSX.utils.aoa_to_sheet(mastersData);
+      wsMasters['!cols'] = [{ wch: 50 }];
+      // Style the title
+      if (wsMasters['A1']) {
+        styleTitleCell(wsMasters, 'A1');
+      }
+      XLSX.utils.book_append_sheet(wb, wsMasters, 'Masters');
+      
+      // ===== LEDGERS DATA SHEET =====
+      // Always show only one sample record in template
+      const data = [
+        {
+          'Name': 'Example Ledger',
+          'Code': 'EX001',
+          'Category': 'Expense',
+          'Status': 'Active',
+          'Financial Year': '2024-25',
+          'Description': 'Example description - Delete this row and add your data',
+        }
+      ];
+
+      // Add header row with instructions
+      const headerRow = [
+        {
+          'Name': 'Name * (Required)',
+          'Code': 'Code (Optional)',
+          'Category': 'Category * (Select from Masters)',
+          'Status': 'Status * (Active/Inactive)',
+          'Financial Year': 'Financial Year (Optional)',
+          'Description': 'Description (Optional)',
+        }
+      ];
+      
+      const allData = [...headerRow, ...data];
+      const ws = createStyledWorksheet(allData, 'Ledgers', {
+        columnWidths: [35, 18, 25, 15, 18, 40], // Name, Code, Category, Status, Financial Year, Description
+        freezeHeader: true,
+      });
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'Ledgers');
+      
+      // Set active sheet to Ledgers
+      wb.Workbook = wb.Workbook || {};
+      wb.Workbook.Views = [{ ActiveTab: 2 }]; // 0=Instructions, 1=Masters, 2=Ledgers
+      
+      const fileName = `ledger_template.xlsx`;
       
       XLSX.writeFile(wb, fileName);
-      toast.success(filteredLedgers.length > 0 
-        ? 'Excel file downloaded successfully' 
-        : 'Template downloaded successfully');
+      toast.success('Template downloaded successfully with Instructions and Masters sheets');
     } catch (error) {
       console.error('Error downloading Excel:', error);
       toast.error('Failed to download Excel file');
@@ -218,6 +298,10 @@ const LedgersPage: React.FC = () => {
 
         // Process rows in batches to avoid overwhelming the UI
         for (const row: any of jsonData) {
+          // Skip header rows that contain instructions (like "Name * (Required)")
+          if (row.Name && (row.Name.includes('*') || row.Name.includes('Required') || row.Name.includes('Optional'))) {
+            continue;
+          }
           try {
             // Normalize column names (handle various formats)
             const name = row.Name || row.name || row['Ledger Name'] || '';
@@ -445,6 +529,8 @@ const LedgersPage: React.FC = () => {
                           ? 'bg-warning-100 text-warning-800'
                           : ledger.category === 'Expense'
                           ? 'bg-error-100 text-error-800'
+                          : ledger.category === 'Income'
+                          ? 'bg-green-100 text-green-800'
                           : 'bg-primary-100 text-primary-800'
                       }`}
                     >

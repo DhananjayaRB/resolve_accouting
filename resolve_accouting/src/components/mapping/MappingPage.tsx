@@ -3,8 +3,10 @@ import { useApp } from '../../context/AppContext';
 import { Link2, Filter, Search, Plus, Save, Trash2, Eye, Download, Upload, Zap } from 'lucide-react';
 import { PayrollItemType } from '../../types';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
+import { createStyledWorksheet, styleHeaderRow, styleTitleCell } from '../../utils/excelStyles';
 import InfoIcon from '../common/InfoIcon';
+import LedgerSelect from '../common/LedgerSelect';
 
 interface PayrollItem {
   id: string;
@@ -187,22 +189,138 @@ const MappingPage: React.FC = () => {
 
   const handleDownloadExcel = () => {
     try {
-      const data = filteredPayrollItems.map((item) => {
-        const mapping = getExistingMapping(item.id);
-        return {
-          'Payroll Item': item.name,
-          'Type': item.type,
-          'Mapped Ledger': mapping?.ledgerHeadName || '',
-          'Ledger ID': mapping?.ledgerHeadId || '',
-          'Financial Year': mapping?.financialYear || '',
-        };
-      });
-
-      const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
+
+      // ===== INSTRUCTIONS SHEET =====
+      const instructionsData = [
+        ['PAYROLL MAPPING TEMPLATE - INSTRUCTIONS'],
+        [''],
+        ['HOW TO USE THIS TEMPLATE:'],
+        ['1. Go to the "Payroll Mappings" sheet to add your mapping entries'],
+        ['2. Use the "Masters" sheet to see available dropdown values'],
+        ['3. Fill in the required fields: Payroll Item, Mapped Ledger'],
+        ['4. Optional fields: Type, Ledger ID, Financial Year'],
+        [''],
+        ['FIELD DESCRIPTIONS:'],
+        ['• Payroll Item: Name of the payroll item (Required) - e.g., "Basic Salary", "HRA", "TDS"'],
+        ['• Type: Payroll item type (Optional) - Earning, Deduction, Asset, Liability'],
+        ['• Mapped Ledger: Name of the ledger to map (Required) - Must match a ledger from Ledgers page'],
+        ['• Ledger ID: Ledger ID (Optional, will be looked up if empty)'],
+        ['• Financial Year: Financial year (Optional) - e.g., "2024-25", "2025-26"'],
+        [''],
+        ['VALIDATION RULES:'],
+        ['• Payroll Item must exist in your payroll system'],
+        ['• Mapped Ledger must exist in your Ledgers list'],
+        ['• Type must be one of: Earning, Deduction, Asset, Liability'],
+        [''],
+        ['IMPORTANT NOTES:'],
+        ['• Delete the example row before adding your data'],
+        ['• Do not modify the "Masters" sheet'],
+        ['• Save the file before importing'],
+        ['• You can map multiple payroll items in the same file'],
+        [''],
+        ['SUPPORT:'],
+        ['For assistance, contact your system administrator'],
+      ];
+
+      const wsInstructions = XLSX.utils.aoa_to_sheet(instructionsData);
+      wsInstructions['!cols'] = [{ wch: 80 }];
+      styleTitleCell(wsInstructions, 'A1'); // Apply title style
+      XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+
+      // ===== MASTERS SHEET =====
+      const mastersData = [
+        ['MASTER VALUES - Use these for dropdowns'],
+        [''],
+        ['PAYROLL ITEM TYPES'],
+        ['Earning'],
+        ['Deduction'],
+        ['Asset'],
+        ['Liability'],
+        [''],
+        ['COMMON FINANCIAL YEARS'],
+        ['2024-25'],
+        ['2025-26'],
+        ['2026-27'],
+        [''],
+        ['COMMON PAYROLL ITEMS'],
+        ['Basic Salary - Earning'],
+        ['HRA (House Rent Allowance) - Earning'],
+        ['DA (Dearness Allowance) - Earning'],
+        ['TDS (Tax Deducted at Source) - Deduction'],
+        ['PF (Provident Fund) - Deduction'],
+        ['ESI (Employee State Insurance) - Deduction'],
+        [''],
+        ['COMMON LEDGER MAPPINGS'],
+        ['Basic Salary → Salary Expense'],
+        ['HRA → House Rent Allowance Expense'],
+        ['TDS → TDS Payable'],
+        ['PF → Provident Fund Payable'],
+        ['ESI → ESI Payable'],
+        [''],
+        ['TIPS:'],
+        ['• Copy values from this sheet to paste into the Payroll Mappings sheet'],
+        ['• Use consistent naming conventions'],
+        ['• Ensure ledger names match exactly with your Ledgers list'],
+      ];
+
+      const wsMasters = XLSX.utils.aoa_to_sheet(mastersData);
+      wsMasters['!cols'] = [{ wch: 50 }];
+      styleTitleCell(wsMasters, 'A1'); // Apply title style
+      XLSX.utils.book_append_sheet(wb, wsMasters, 'Masters');
+
+      // ===== PAYROLL MAPPINGS DATA SHEET =====
+      // Always show only one sample record
+      const data = [
+        {
+          'Payroll Item': 'Example Payroll Item',
+          'Type': 'Earning',
+          'Mapped Ledger': 'Example Ledger',
+          'Ledger ID': '',
+          'Financial Year': '2024-25',
+        }
+      ];
+
+      // Add header row with instructions
+      const headerRow = [
+        {
+          'Payroll Item': 'Payroll Item * (Required)',
+          'Type': 'Type (Earning/Deduction/Asset/Liability)',
+          'Mapped Ledger': 'Mapped Ledger * (Name from Ledgers)',
+          'Ledger ID': 'Ledger ID (Optional, will be looked up if empty)',
+          'Financial Year': 'Financial Year (Optional)',
+        }
+      ];
+
+      const allData = [...headerRow, ...data];
+      const ws = XLSX.utils.json_to_sheet(allData, { skipHeader: false });
+
+      // Apply header styling
+      styleHeaderRow(ws, Object.keys(headerRow[0]).length);
+
+      // Set column widths for better readability
+      const colWidths = [
+        { wch: 30 }, // Payroll Item
+        { wch: 15 }, // Type
+        { wch: 30 }, // Mapped Ledger
+        { wch: 15 }, // Ledger ID
+        { wch: 18 }, // Financial Year
+      ];
+      ws['!cols'] = colWidths;
+
+      // Freeze header row (first two rows)
+      ws['!freeze'] = { xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft' };
+
       XLSX.utils.book_append_sheet(wb, ws, 'Payroll Mappings');
-      XLSX.writeFile(wb, `payroll_mappings_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('Excel file downloaded successfully');
+
+      // Set active sheet to Payroll Mappings
+      wb.Workbook = wb.Workbook || {};
+      wb.Workbook.Views = [{ ActiveTab: 2 }]; // 0=Instructions, 1=Masters, 2=Payroll Mappings
+
+      const fileName = `payroll_mapping_template.xlsx`;
+
+      XLSX.writeFile(wb, fileName);
+      toast.success('Template downloaded successfully with Instructions and Masters sheets');
     } catch (error) {
       console.error('Error downloading Excel:', error);
       toast.error('Failed to download Excel file');
@@ -377,20 +495,45 @@ const MappingPage: React.FC = () => {
       try {
         const data = new Uint8Array(event.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
+        
+        // Try to find the Payroll Mappings sheet, or use the first sheet
+        let sheetName = workbook.SheetNames.find(name => 
+          name.toLowerCase().includes('payroll') || name.toLowerCase().includes('mapping')
+        ) || workbook.SheetNames[0];
+        
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Skip the first two header rows (instructions and actual headers)
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: 2 });
+
+        if (jsonData.length === 0) {
+          toast.error('Excel file is empty or only contains headers');
+          e.target.value = '';
+          return;
+        }
 
         let successCount = 0;
         let errorCount = 0;
+        const errors: string[] = [];
 
         for (const row: any of jsonData) {
           try {
-            const payrollItemName = row['Payroll Item'] || row['Payroll Item Name'] || row.payrollItem;
-            const ledgerName = row['Mapped Ledger'] || row['Ledger'] || row.ledgerHeadName;
-            const ledgerId = row['Ledger ID'] || row.ledgerHeadId;
+            // Skip header rows that contain instructions (like "Payroll Item * (Required)")
+            if (row['Payroll Item'] && (
+              row['Payroll Item'].includes('*') || 
+              row['Payroll Item'].includes('Required') || 
+              row['Payroll Item'].includes('Optional')
+            )) {
+              continue;
+            }
+
+            const payrollItemName = row['Payroll Item'] || row['Payroll Item * (Required)'] || row['Payroll Item Name'] || row.payrollItem || '';
+            const ledgerName = row['Mapped Ledger'] || row['Mapped Ledger * (Name from Ledgers)'] || row['Ledger'] || row.ledgerHeadName || '';
+            const ledgerId = row['Ledger ID'] || row['Ledger ID (Optional, will be looked up if empty)'] || row.ledgerHeadId || '';
+            const financialYear = row['Financial Year'] || row['Financial Year (Optional)'] || '';
 
             if (!payrollItemName || !ledgerName) {
+              errors.push(`Row ${successCount + errorCount + 3}: Payroll Item and Mapped Ledger are required`);
               errorCount++;
               continue;
             }
@@ -400,7 +543,14 @@ const MappingPage: React.FC = () => {
               head.name === ledgerName || head.id === ledgerId
             );
 
-            if (!payrollItem || !ledgerHead) {
+            if (!payrollItem) {
+              errors.push(`Row ${successCount + errorCount + 3}: Payroll Item "${payrollItemName}" not found`);
+              errorCount++;
+              continue;
+            }
+
+            if (!ledgerHead) {
+              errors.push(`Row ${successCount + errorCount + 3}: Ledger "${ledgerName}" not found`);
               errorCount++;
               continue;
             }
@@ -410,6 +560,7 @@ const MappingPage: React.FC = () => {
               await updatePayrollMapping(existingMapping.id, {
                 ledgerHeadId: ledgerHead.id,
                 ledgerHeadName: ledgerHead.name,
+                financialYear: financialYear || existingMapping.financialYear,
               });
             } else {
               await addPayrollMapping({
@@ -417,21 +568,31 @@ const MappingPage: React.FC = () => {
                 payrollItemName: payrollItem.name,
                 ledgerHeadId: ledgerHead.id,
                 ledgerHeadName: ledgerHead.name,
-                financialYear: row['Financial Year'] || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
-              });
+                financialYear: financialYear || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1),
+              }, true); // Silent mode
             }
             successCount++;
-          } catch (error) {
-            console.error('Error importing row:', row, error);
+          } catch (error: any) {
+            errors.push(`Row ${successCount + errorCount + 3}: ${error.message || 'Unknown error'}`);
             errorCount++;
           }
         }
 
-        toast.success(`Imported ${successCount} mappings${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+        if (successCount > 0) {
+          toast.success(`Successfully imported ${successCount} payroll mapping${successCount > 1 ? 's' : ''}.`);
+        }
+        if (errorCount > 0) {
+          toast.error(`Failed to import ${errorCount} mapping${errorCount > 1 ? 's' : ''}. See console for details.`);
+          console.error('Import errors:', errors);
+        }
+        if (successCount === 0 && errorCount === 0) {
+          toast.info('No valid payroll mapping data found to import.');
+        }
+
         e.target.value = ''; // Reset input
       } catch (error) {
         console.error('Error importing Excel:', error);
-        toast.error('Failed to import Excel file');
+        toast.error('Failed to import Excel file. Please check the file format.');
         e.target.value = ''; // Reset input
       }
     };
@@ -477,12 +638,6 @@ const MappingPage: React.FC = () => {
         </div>
       </div>
       
-      <div className="card p-4 mb-6">
-        <p className="text-gray-600">
-          Map your payroll items to corresponding ledger heads to ensure accurate accounting entries. 
-          Each payroll item should be mapped to an appropriate ledger head based on its type.
-        </p>
-      </div>
       
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
@@ -561,14 +716,9 @@ const MappingPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="table-cell">
-                      <select
-                        className="select text-sm py-1.5"
-                        value={existingMapping?.ledgerHeadId || ''}
-                        onChange={(e) => handleMappingChange(item.id, e.target.value)}
-                      >
-                        <option value="">-- Select Ledger --</option>
-                        {activeLedgerHeads
-                          .filter(ledger => {
+                      <div className="min-w-[280px]">
+                        <LedgerSelect
+                          ledgers={activeLedgerHeads.filter(ledger => {
                             // Include the currently mapped ledger for this item
                             if (existingMapping?.ledgerHeadId === ledger.id) {
                               return true;
@@ -578,18 +728,13 @@ const MappingPage: React.FC = () => {
                               mapping.ledgerHeadId === ledger.id && 
                               mapping.payrollItemId !== item.id
                             );
-                          })
-                          .map((ledger) => (
-                            <option key={ledger.id} value={ledger.id}>
-                              {ledger.name}
-                            </option>
-                          ))}
-                      </select>
-                      {existingMapping && (
-                        <div className="mt-1 text-sm text-gray-500">
-                          Currently mapped to: {existingMapping.ledgerHeadName}
-                        </div>
-                      )}
+                          })}
+                          value={existingMapping?.ledgerHeadId || ''}
+                          onChange={(ledgerId) => handleMappingChange(item.id, ledgerId)}
+                          placeholder="Select Ledger"
+                          showCode={true}
+                        />
+                      </div>
                     </td>
                     <td className="table-cell">
                       <div className="flex space-x-2">

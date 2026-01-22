@@ -35,7 +35,10 @@ import {
   FileBarChart,
   CheckCircle2,
   XCircle,
+  Monitor,
+  User,
 } from 'lucide-react';
+import { getStoredUserInfo } from '../../utils/auth';
 
 interface MenuItem {
   name: string;
@@ -162,6 +165,7 @@ const Sidebar: React.FC = () => {
         { name: 'Users & Roles', to: '/settings/users', icon: <UserCog size={16} /> },
         { name: 'Permissions', to: '/settings/permissions', icon: <Shield size={16} /> },
         { name: 'Notifications', to: '/settings/notifications', icon: <Bell size={16} /> },
+        { name: 'UI Preferences', to: '/settings/ui-preferences', icon: <Monitor size={16} /> },
         { name: 'API Keys', to: '/settings/api-keys', icon: <Key size={16} /> },
       ],
     },
@@ -194,28 +198,28 @@ const Sidebar: React.FC = () => {
           <li key={key}>
             <button
               onClick={() => toggleSection(key)}
-              className={`w-full flex items-center justify-between p-2 rounded-md transition-colors duration-200 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all duration-200 ${
                 hasActive
-                  ? 'bg-secondary-500/20 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  ? 'bg-secondary-500/20 text-white shadow-sm'
+                  : 'text-gray-300 hover:bg-gray-800/50 hover:text-white'
               } ${isCollapsed ? 'justify-center' : ''}`}
             >
               <div className="flex items-center">
-                <div>{item.icon}</div>
-                {!isCollapsed && <span className="ml-3 font-medium">{item.name}</span>}
+                <div className="opacity-80">{item.icon}</div>
+                {!isCollapsed && <span className="ml-3 text-sm font-light">{item.name}</span>}
               </div>
               {!isCollapsed && (
                 <div className="ml-auto">
                   {isExpanded ? (
-                    <ChevronDown size={16} className="text-gray-400" />
+                    <ChevronDown size={14} className="text-gray-400" />
                   ) : (
-                    <ChevronRight size={16} className="text-gray-400" />
+                    <ChevronRight size={14} className="text-gray-400" />
                   )}
                 </div>
               )}
             </button>
             {!isCollapsed && isExpanded && (
-              <ul className="mt-1 ml-4 space-y-1 border-l border-gray-700 pl-2">
+              <ul className="mt-1 ml-3 space-y-0.5 border-l border-gray-700/50 pl-3">
                 {item.children?.map((child) => renderMenuItem(child, level + 1, key))}
               </ul>
             )}
@@ -228,15 +232,15 @@ const Sidebar: React.FC = () => {
             <NavLink
               to={item.to || '#'}
               className={({ isActive }) =>
-                `flex items-center p-2 rounded-md transition-colors duration-200 ${
+                `flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 ${
                   isActive
-                    ? 'bg-secondary-500 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ? 'bg-secondary-500 text-white shadow-sm'
+                    : 'text-gray-300 hover:bg-gray-800/50 hover:text-white'
                 } ${isCollapsed ? 'justify-center' : ''}`
               }
             >
-              <div>{item.icon}</div>
-              {!isCollapsed && <span className="ml-3">{item.name}</span>}
+              <div className="opacity-80">{item.icon}</div>
+              {!isCollapsed && <span className="ml-3 text-sm font-light">{item.name}</span>}
             </NavLink>
           </li>
         );
@@ -248,24 +252,24 @@ const Sidebar: React.FC = () => {
           <li key={key}>
             <button
               onClick={() => toggleSection(key)}
-              className={`w-full flex items-center justify-between p-2 rounded-md transition-colors duration-200 ${
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 ${
                 hasActive
                   ? 'bg-secondary-500/10 text-white'
                   : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
               }`}
             >
               <div className="flex items-center">
-                <div>{item.icon}</div>
-                <span className="ml-2 text-sm">{item.name}</span>
+                <div className="opacity-70">{item.icon}</div>
+                <span className="ml-2 text-sm font-light">{item.name}</span>
               </div>
               {isExpanded ? (
-                <ChevronDown size={14} className="text-gray-500" />
+                <ChevronDown size={12} className="text-gray-500" />
               ) : (
-                <ChevronRight size={14} className="text-gray-500" />
+                <ChevronRight size={12} className="text-gray-500" />
               )}
             </button>
             {isExpanded && (
-              <ul className="mt-1 ml-4 space-y-1 border-l border-gray-700 pl-2">
+              <ul className="mt-1 ml-3 space-y-0.5 border-l border-gray-700/50 pl-3">
                 {item.children?.map((child) => renderMenuItem(child, level + 1, key))}
               </ul>
             )}
@@ -277,15 +281,15 @@ const Sidebar: React.FC = () => {
             <NavLink
               to={item.to || '#'}
               className={({ isActive }) =>
-                `flex items-center p-2 rounded-md transition-colors duration-200 ${
+                `flex items-center px-3 py-2 rounded-lg transition-all duration-200 ${
                   isActive
-                    ? 'bg-secondary-500 text-white'
+                    ? 'bg-secondary-500 text-white shadow-sm'
                     : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
                 }`
               }
             >
-              <div>{item.icon}</div>
-              <span className="ml-2 text-sm">{item.name}</span>
+              <div className="opacity-70">{item.icon}</div>
+              <span className="ml-2 text-sm font-light">{item.name}</span>
             </NavLink>
           </li>
         );
@@ -297,17 +301,17 @@ const Sidebar: React.FC = () => {
           <NavLink
             to={item.to || '#'}
             className={({ isActive }) =>
-              `flex items-center p-2 rounded-md transition-colors duration-200 ${
+              `flex items-center px-3 py-2 rounded-lg transition-all duration-200 ${
                 isActive
-                  ? 'bg-secondary-500 text-white'
+                  ? 'bg-secondary-500 text-white shadow-sm'
                   : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
               }`
             }
           >
-            <div>{item.icon}</div>
-            <span className="ml-2 text-sm">{item.name}</span>
+            <div className="opacity-70">{item.icon}</div>
+            <span className="ml-2 text-sm font-light">{item.name}</span>
             {item.badge && (
-              <span className="ml-auto text-xs bg-secondary-500 text-white px-1.5 py-0.5 rounded">
+              <span className="ml-auto text-xs bg-secondary-500 text-white px-1.5 py-0.5 rounded font-light">
                 {item.badge}
               </span>
             )}
@@ -317,12 +321,19 @@ const Sidebar: React.FC = () => {
     }
   };
 
+  const userInfo = getStoredUserInfo();
+  const userName = userInfo.role_name || 'Admin User';
+  const userId = userInfo.user_id || '1001';
+
   const sidebarClasses = `${
     isCollapsed ? 'w-20' : 'w-72'
-  } text-white fixed h-full transition-all duration-300 ease-in-out z-20 shadow-lg ${
+  } text-white fixed h-full transition-all duration-300 ease-in-out z-20 shadow-2xl ${
     isMobileOpen ? 'translate-x-0' : '-translate-x-full'
   } md:translate-x-0`;
-  const sidebarStyle = { backgroundColor: '#0A1A33' }; // MProfit Navy
+  const sidebarStyle = { 
+    backgroundColor: '#0A1A33',
+    background: 'linear-gradient(180deg, #0A1A33 0%, #081429 100%)'
+  }; // MProfit Navy with gradient
 
   return (
     <>
@@ -346,58 +357,65 @@ const Sidebar: React.FC = () => {
 
       <aside className={sidebarClasses} style={sidebarStyle}>
         <div className="flex flex-col h-full">
-          {/* Header */}
+          {/* Header with Logo */}
           <div
             className={`flex items-center ${
               isCollapsed ? 'justify-center' : 'justify-between'
-            } p-4 border-b border-gray-800`}
+            } p-5 border-b border-gray-700/50`}
           >
             {!isCollapsed && (
               <div className="flex items-center">
-                <span className="text-secondary-400 text-2xl">₹</span>
-                <span className="ml-2 font-semibold text-lg text-white">
-                  Resolve Pay
-                </span>
+                <div className="w-8 h-8 bg-secondary-500 rounded-lg flex items-center justify-center">
+                  <span className="text-white text-lg font-light">₹</span>
+                </div>
+                <div className="ml-3">
+                  <div className="text-white text-lg font-light tracking-wide">Resolve Pay</div>
+                  <div className="text-gray-400 text-xs font-light">Accounting Module</div>
+                </div>
               </div>
             )}
-            {isCollapsed && <span className="text-secondary-400 text-2xl">₹</span>}
+            {isCollapsed && (
+              <div className="w-8 h-8 bg-secondary-500 rounded-lg flex items-center justify-center">
+                <span className="text-white text-lg font-light">₹</span>
+              </div>
+            )}
             <button
-              className="text-gray-300 hover:text-white hidden md:block"
+              className="text-gray-400 hover:text-white hidden md:block transition-colors"
               onClick={toggleSidebar}
             >
-              <Menu size={20} />
+              <Menu size={18} />
             </button>
           </div>
 
+          {/* User Info Section */}
+          {!isCollapsed && (
+            <div className="px-5 py-4 bg-secondary-500/10 border-b border-gray-700/30">
+              <div className="flex items-center">
+                <div className="w-10 h-10 bg-secondary-500/20 rounded-full flex items-center justify-center border border-secondary-500/30">
+                  <User size={18} className="text-secondary-400" />
+                </div>
+                <div className="ml-3 flex-1 min-w-0">
+                  <div className="text-white text-sm font-light truncate">{userName}</div>
+                  <div className="text-gray-400 text-xs font-light">ID: {userId}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Navigation */}
-          <nav className="flex-1 p-4 overflow-y-auto">
-            <ul className="space-y-1">
+          <nav className="flex-1 p-3 overflow-y-auto custom-scrollbar">
+            <ul className="space-y-0.5">
               {menuStructure.map((item) => renderMenuItem(item))}
             </ul>
           </nav>
 
           {/* Footer */}
-          <div className="p-4 border-t border-gray-800">
-            <div
-              className={`flex items-center ${
-                isCollapsed ? 'justify-center' : ''
-              }`}
-            >
-              <div className="bg-gray-800 p-2 rounded-full">
-                <Settings
-                  size={isCollapsed ? 20 : 16}
-                  className="text-gray-300"
-                />
+          <div className="p-4 border-t border-gray-700/50">
+            {!isCollapsed && (
+              <div className="text-gray-400 text-xs font-light text-center">
+                Accounting Module v0.1.0
               </div>
-              {!isCollapsed && (
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-white">
-                    Accounting Module
-                  </p>
-                  <p className="text-xs text-gray-400">v0.1.0</p>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </aside>

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
-// import VoiceSync from '../voicesync/VoiceSync'; // Hidden per user request
+import VoiceSync from '../voicesync/VoiceSync';
 import GuidedAssistant from '../guided/GuidedAssistant';
+import { getUISettings, UISettings } from '../../utils/settings';
 
 // Error Boundary Component
 class ComponentErrorBoundary extends React.Component<
@@ -32,6 +33,24 @@ class ComponentErrorBoundary extends React.Component<
 }
 
 const AppLayout: React.FC = () => {
+  const [uiSettings, setUISettings] = useState<UISettings>(getUISettings());
+
+  useEffect(() => {
+    // Load settings on mount
+    setUISettings(getUISettings());
+
+    // Listen for settings changes
+    const handleSettingsChange = (event: CustomEvent<UISettings>) => {
+      setUISettings(event.detail);
+    };
+
+    window.addEventListener('ui-settings-changed', handleSettingsChange as EventListener);
+
+    return () => {
+      window.removeEventListener('ui-settings-changed', handleSettingsChange as EventListener);
+    };
+  }, []);
+
   const handleSyncInitiated = (command: any) => {
     console.log('VoiceSync initiated:', command);
     // This will be handled by the specific sync components
@@ -53,14 +72,18 @@ const AppLayout: React.FC = () => {
           </div>
         </main>
       </div>
-      {/* VoiceSync - Hidden per user request */}
-      {/* <ComponentErrorBoundary>
-        <VoiceSync onSyncInitiated={handleSyncInitiated} />
-      </ComponentErrorBoundary> */}
-      {/* Guided Assistant - Hidden per user request */}
-      {/* <ComponentErrorBoundary>
-        <GuidedAssistant onExecutionComplete={handleExecutionComplete} />
-      </ComponentErrorBoundary> */}
+      {/* VoiceSync - Controlled by settings */}
+      {uiSettings.showVoiceSync && (
+        <ComponentErrorBoundary>
+          <VoiceSync onSyncInitiated={handleSyncInitiated} />
+        </ComponentErrorBoundary>
+      )}
+      {/* Guided Assistant - Controlled by settings */}
+      {uiSettings.showAIAssistant && (
+        <ComponentErrorBoundary>
+          <GuidedAssistant onExecutionComplete={handleExecutionComplete} />
+        </ComponentErrorBoundary>
+      )}
     </div>
   );
 };

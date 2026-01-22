@@ -7,6 +7,7 @@ import ActionPlanner, { ActionStep, ExecutionPlan } from './ActionPlanner';
 import ExecutionEngine, { ExecutionResult } from './ExecutionEngine';
 import GuidedModeOverlay from './GuidedModeOverlay';
 import ExecutionVisualizer from './ExecutionVisualizer';
+import { getUISettings } from '../../utils/settings';
 
 interface GuidedAssistantProps {
   onExecutionComplete?: (results: ExecutionResult[]) => void;
@@ -24,7 +25,7 @@ const GuidedAssistant: React.FC<GuidedAssistantProps> = ({ onExecutionComplete }
   const [executionResults, setExecutionResults] = useState<ExecutionResult[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [showPlanPreview, setShowPlanPreview] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(true); // Hidden by default
+  const [isMinimized, setIsMinimized] = useState(true); // Minimized by default, will be controlled by settings
   const recognitionRef = useRef<any>(null);
 
   // Initialize speech recognition
@@ -234,11 +235,11 @@ const GuidedAssistant: React.FC<GuidedAssistantProps> = ({ onExecutionComplete }
 
   return (
     <>
-      {/* Floating Toggle Button - Show when minimized - Positioned in top-right to avoid overlap */}
+      {/* Floating Toggle Button - Show when minimized - Positioned in bottom-right */}
       {isMinimized && (
         <button
           onClick={() => setIsMinimized(false)}
-          className="fixed top-20 right-[420px] z-[9997] bg-gradient-to-r from-secondary-600 to-secondary-700 text-white rounded-full p-4 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-110 group"
+          className="fixed bottom-6 right-6 z-[9997] bg-gradient-to-r from-secondary-600 to-secondary-700 text-white rounded-full p-4 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-110 group"
           title="Show AI Assistant"
         >
           <MessageSquare size={24} className="group-hover:scale-110 transition-transform" />
@@ -250,12 +251,12 @@ const GuidedAssistant: React.FC<GuidedAssistantProps> = ({ onExecutionComplete }
         </button>
       )}
 
-      {/* Floating Prompt Bar - Positioned in top-right to avoid overlap with Next button */}
+      {/* Floating Prompt Bar - Positioned in bottom-right */}
       {!isMinimized && (
-      <div className="fixed top-20 right-[420px] z-[9997] w-96 max-h-[calc(100vh-120px)] transition-all duration-300">
-        <div className="bg-white rounded-2xl shadow-2xl border-2 border-secondary-200">
+      <div className="fixed bottom-6 right-6 z-[9997] w-96 max-h-[calc(100vh-200px)] transition-all duration-300 flex flex-col">
+        <div className="bg-white rounded-2xl shadow-2xl border-2 border-secondary-200 flex flex-col max-h-full overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-secondary-600 to-secondary-700 px-4 py-3 rounded-t-2xl">
+          <div className="bg-gradient-to-r from-secondary-600 to-secondary-700 px-4 py-3 rounded-t-2xl flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MessageSquare size={20} className="text-white" />
@@ -285,8 +286,8 @@ const GuidedAssistant: React.FC<GuidedAssistantProps> = ({ onExecutionComplete }
             </div>
           </div>
 
-          {/* Content */}
-          <div className="p-4">
+          {/* Content - Scrollable */}
+          <div className="p-4 overflow-y-auto flex-1 min-h-0">
             {mode === 'idle' && (
               <div className="space-y-3">
                 <input
@@ -320,7 +321,7 @@ const GuidedAssistant: React.FC<GuidedAssistantProps> = ({ onExecutionComplete }
                   </button>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Example: "For payroll, current financial year, December 2025, push records to Tally"
+                  Example: "For payroll, current financial year, December 2025, update records to Tally"
                 </p>
               </div>
             )}

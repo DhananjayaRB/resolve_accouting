@@ -623,7 +623,7 @@ const MapForTally: React.FC = () => {
           {/* Wizard Header - Ultra Compact */}
           <div className="bg-gradient-to-r from-secondary-600 to-secondary-700 px-3 py-1.5 flex-shrink-0">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-base font-bold text-white">Push to Tally</h3>
+              <h3 className="text-base font-bold text-white">Update to Tally</h3>
               {pushStatus === 'running' && (
                 <div className="flex items-center gap-1 text-white/90">
                   <Loader2 size={12} className="animate-spin" />
@@ -647,7 +647,7 @@ const MapForTally: React.FC = () => {
                     <span className={`mt-1 text-[10px] font-medium ${
                       currentStep >= step ? 'text-white' : 'text-white/70'
                     }`}>
-                      {step === 1 ? 'Select & Review' : step === 2 ? 'Preview' : 'Push & Sync'}
+                      {step === 1 ? 'Select & Review' : step === 2 ? 'Preview' : 'Update & Sync'}
                     </span>
                   </div>
                   {step < 3 && (
@@ -919,7 +919,7 @@ const MapForTally: React.FC = () => {
               {currentStep === 3 && (
                 <div className="flex flex-col h-full space-y-4 overflow-hidden">
                   <div className="flex-shrink-0">
-                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Step 3: Push to Tally</h4>
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Step 3: Update to Tally</h4>
                     
                     {pushStatus === 'idle' && (
                       <div className="space-y-4">
@@ -947,7 +947,7 @@ const MapForTally: React.FC = () => {
                           className="btn btn-primary w-full flex items-center justify-center"
                         >
                           <Play size={18} className="mr-2" />
-                          Start Push to Tally
+                          Start Update to Tally
                         </button>
                       </div>
                     )}
@@ -964,7 +964,7 @@ const MapForTally: React.FC = () => {
                             <div className="flex items-center justify-between mb-6">
                               <div>
                                 <h5 className="text-sm font-semibold text-gray-700 mb-1">Sync Progress</h5>
-                                <p className="text-xs text-gray-500">Pushing data to Tally</p>
+                                <p className="text-xs text-gray-500">Updating data to Tally</p>
                               </div>
                               <div className="text-right">
                                 <div className="text-2xl font-bold text-secondary-600">{pushProgress}%</div>
@@ -1124,7 +1124,7 @@ const MapForTally: React.FC = () => {
                                 </div>
                               </div>
                               <h5 className="text-2xl font-bold text-gray-900 mb-2">Sync Completed Successfully!</h5>
-                              <p className="text-gray-600 text-sm">All data has been pushed to Tally successfully.</p>
+                              <p className="text-gray-600 text-sm">All data has been updated to Tally successfully.</p>
                             </div>
 
                             {/* Sync Summary Metrics */}
