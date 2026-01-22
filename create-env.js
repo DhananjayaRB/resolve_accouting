@@ -5,12 +5,15 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const envContent = `# Database Configuration
+const envContent = `# Database Configuration (Production Database)
 DB_USER=postgres
-DB_HOST=localhost
-DB_NAME=resolve_accounting
-DB_PASSWORD=postgres
+DB_HOST=20.204.119.48
+DB_NAME=resolve_accouting
+DB_PASSWORD=resolve@2022
 DB_PORT=5432
+
+# Or use connection string (recommended)
+# DATABASE_URL=postgres://postgres:resolve%402022@20.204.119.48:5432/resolve_accouting?sslmode=disable&pgbouncer=true
 
 # Server Configuration
 PORT=3001

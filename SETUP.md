@@ -5,42 +5,25 @@ This guide will help you set up the Resolve Accounting application to run locall
 ## Prerequisites
 
 1. **Node.js** (v16 or higher)
-2. **PostgreSQL** (v12 or higher) installed and running locally
-3. **npm** or **yarn** package manager
+2. **npm** or **yarn** package manager
+3. **Network access** to the production database server (20.204.119.48)
 
-## Step 1: Install PostgreSQL
+**Note:** The application is configured to use the production database by default. No local PostgreSQL installation is required.
 
-If you don't have PostgreSQL installed:
-
-### Windows:
-- Download and install from [PostgreSQL Official Website](https://www.postgresql.org/download/windows/)
-- During installation, remember the password you set for the `postgres` user
-- Default port is `5432`
-
-### macOS:
-```bash
-brew install postgresql
-brew services start postgresql
-```
-
-### Linux (Ubuntu/Debian):
-```bash
-sudo apt-get update
-sudo apt-get install postgresql postgresql-contrib
-sudo systemctl start postgresql
-```
-
-## Step 2: Configure Environment Variables
+## Step 1: Configure Environment Variables
 
 Create a `.env` file in the root directory with the following content:
 
 ```env
-# Database Configuration
+# Database Configuration (Production Database)
 DB_USER=postgres
-DB_HOST=localhost
-DB_NAME=resolve_accounting
-DB_PASSWORD=postgres
+DB_HOST=20.204.119.48
+DB_NAME=resolve_accouting
+DB_PASSWORD=resolve@2022
 DB_PORT=5432
+
+# Or use connection string (recommended)
+# DATABASE_URL=postgres://postgres:resolve%402022@20.204.119.48:5432/resolve_accouting?sslmode=disable&pgbouncer=true
 
 # Server Configuration
 PORT=3001
@@ -49,7 +32,7 @@ PORT=3001
 NODE_ENV=development
 ```
 
-**Important:** Update `DB_PASSWORD` with your actual PostgreSQL password if it's different from `postgres`.
+**Note:** The application is configured to use the production database (`20.204.119.48`) by default for both local and production environments.
 
 ## Step 3: Install Dependencies
 
@@ -61,23 +44,13 @@ npm install
 
 ## Step 4: Set Up the Database
 
-Run the database setup script which will:
-1. Create the database if it doesn't exist
-2. Run all migrations to create the necessary tables
+Run the database migrations to create/update the necessary tables:
 
 ```bash
-npm run db:setup
-```
-
-Alternatively, you can run the steps individually:
-
-```bash
-# Create database only
-npm run db:create
-
-# Run migrations only
 npm run db:migrate
 ```
+
+**Note:** The database already exists on the production server, so `db:create` is not needed. The migrations will create or update tables as needed.
 
 ## Step 5: Start the Application
 

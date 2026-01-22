@@ -4,8 +4,10 @@ Follow these steps to get the application running locally:
 
 ## 1. Prerequisites Check
 - ✅ Node.js installed (v16+)
-- ✅ PostgreSQL installed and running
 - ✅ npm installed
+- ✅ Network access to production database (20.204.119.48)
+
+**Note:** The application uses the production database by default. No local PostgreSQL installation is required.
 
 ## 2. Install Dependencies
 ```bash
@@ -17,16 +19,16 @@ npm install
 npm run setup:env
 ```
 
-Then edit `.env` and update `DB_PASSWORD` if your PostgreSQL password is different from "postgres".
+The `.env` file will be created with production database settings. No changes needed unless you want to use a different database.
 
-## 4. Setup Database
+## 4. Setup Database (Optional)
 ```bash
-npm run db:setup
+npm run db:migrate
 ```
 
 This will:
-- Create the `resolve_accounting` database
-- Run all migrations to create tables
+- Run all migrations to create/update tables in the production database
+- **Note:** Database already exists, so `db:create` is not needed
 
 ## 5. Start the Application
 ```bash
@@ -40,9 +42,9 @@ The app will be available at:
 ## Troubleshooting
 
 **Database connection error?**
-- Make sure PostgreSQL is running
-- Check your password in `.env` file
-- Verify PostgreSQL is listening on port 5432
+- Check your network connection to the production database (20.204.119.48)
+- Verify the database credentials in `.env` file
+- Ensure the database server is accessible from your network
 
 **Port already in use?**
 - Change `PORT` in `.env` for backend

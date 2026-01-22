@@ -39,9 +39,9 @@ const poolConfig = connectionString
     }
   : {
       user: process.env.DB_USER || 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'resolve_accounting',
-      password: process.env.DB_PASSWORD || 'Resolve@321',
+      host: process.env.DB_HOST || '20.204.119.48',
+      database: process.env.DB_NAME || 'resolve_accouting',
+      password: process.env.DB_PASSWORD || 'resolve@2022',
       port: process.env.DB_PORT || 5432,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     };
