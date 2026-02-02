@@ -1,5 +1,19 @@
 import express from 'express';
+import cors from 'cors';
+
 const router = express.Router();
+
+// CORS middleware for this router
+router.use(cors({
+  origin: '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Org-Id', 'Accept'],
+  exposedHeaders: ['Content-Type', 'Content-Length']
+}));
+
+// Handle preflight requests
+router.options('*', cors());
 
 // GET /api/organisation
 router.get('/', (req, res) => {

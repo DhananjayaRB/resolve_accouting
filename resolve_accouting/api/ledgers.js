@@ -27,13 +27,32 @@ export default async function handler(req, res) {
       case 'GET':
         // Get all ledgers or single ledger filtered by org_id
         if (id) {
-          const singleResult = await pool.query('SELECT * FROM ledger WHERE id = $1 AND org_id = $2', [id, orgId]);
+          const singleResult = await pool.query(
+            `SELECT 
+              l.*,
+              tg.name as group_name,
+              tg.parent_group as parent_group_name
+            FROM ledger l
+            LEFT JOIN tally_groups tg ON l.group_id = tg.id AND tg.org_id = l.org_id
+            WHERE l.id = $1 AND l.org_id = $2`,
+            [id, orgId]
+          );
           if (singleResult.rows.length === 0) {
             return res.status(404).json({ error: 'Ledger not found' });
           }
           return res.json(singleResult.rows[0]);
         }
-        const result = await pool.query('SELECT * FROM ledger WHERE org_id = $1 ORDER BY created_at DESC', [orgId]);
+        const result = await pool.query(
+          `SELECT 
+            l.*,
+            tg.name as group_name,
+            tg.parent_group as parent_group_name
+          FROM ledger l
+          LEFT JOIN tally_groups tg ON l.group_id = tg.id AND tg.org_id = l.org_id
+          WHERE l.org_id = $1 
+          ORDER BY l.created_at DESC`,
+          [orgId]
+        );
         return res.json(result.rows);
 
       case 'POST':

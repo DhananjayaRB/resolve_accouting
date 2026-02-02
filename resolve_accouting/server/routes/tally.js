@@ -1,8 +1,23 @@
 import express from 'express';
 import axios from 'axios';
 import pool from '../db/config.js';
+import syncMastersHandler from '../../api/tally/sync-masters.js';
+import chartOfAccountsHandler from '../../api/tally/chart-of-accounts.js';
+import cors from 'cors';
 
 const router = express.Router();
+
+// CORS middleware for this router
+router.use(cors({
+  origin: '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Org-Id', 'Accept'],
+  exposedHeaders: ['Content-Type', 'Content-Length']
+}));
+
+// Handle preflight requests
+router.options('*', cors());
 
 // Debug middleware for this route
 router.use((req, res, next) => {
@@ -146,18 +161,35 @@ router.post('/push', async (req, res) => {
   }
 });
 
-// Get all Tally configs for an organization
-router.get('/config/:org_id', async (req, res) => {
+// Get all Tally configs for an organization (supports both path and query parameters)
+router.get('/config/:org_id?', async (req, res) => {
   try {
-    const { org_id } = req.params;
+    // Support both path parameter and query parameter
+    const org_id = req.params.org_id || req.query.org_id || req.headers['x-org-id'];
+    
+    if (!org_id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Organization ID is required' 
+      });
+    }
+    
+    console.log(`Fetching Tally configs for org_id: ${org_id}`);
+    
     const result = await pool.query(
       `SELECT * FROM organization_tally_config WHERE org_id = $1 ORDER BY created_at DESC`,
       [org_id]
     );
+    
+    console.log(`Found ${result.rows.length} profiles for org_id: ${org_id}`);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('Error fetching Tally configs:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch Tally configs', error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch Tally configs', 
+      error: error.message 
+    });
   }
 });
 
@@ -354,33 +386,47 @@ router.post('/sync-ledgers', async (req, res) => {
   try {
     console.log('Syncing ledger heads from Tally...');
     
-    // Get Tally configuration for the organization
-    const { org_id } = req.body;
-    if (!org_id) {
-      // Try to get from query or use default
-      const defaultOrgId = req.query.org_id;
-      if (!defaultOrgId) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Organization ID is required' 
-        });
-      }
+    // Get org_id and profile_id from header, body, or query parameter
+    const orgId = req.headers['x-org-id'] || req.body.org_id || req.query.org_id;
+    const profileId = req.body.profile_id || req.query.profile_id;
+    
+    if (!orgId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Organization ID is required' 
+      });
     }
 
-    // Get Tally config from database
-    const configResult = await pool.query(
-      `SELECT tally_ip, tally_port FROM organization_tally_config WHERE org_id = $1 LIMIT 1`,
-      [org_id || req.query.org_id]
-    );
+    // Get Tally config from database - use profile_id if provided, otherwise get first one
+    let configResult;
+    if (profileId) {
+      configResult = await pool.query(
+        `SELECT tally_ip, tally_port, profile_name, tally_company_name 
+         FROM organization_tally_config 
+         WHERE org_id = $1 AND id = $2 LIMIT 1`,
+        [orgId, profileId]
+      );
+    } else {
+      configResult = await pool.query(
+        `SELECT tally_ip, tally_port, profile_name, tally_company_name 
+         FROM organization_tally_config 
+         WHERE org_id = $1 
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [orgId]
+      );
+    }
 
     if (configResult.rows.length === 0) {
       return res.status(404).json({ 
         success: false, 
-        message: 'Tally configuration not found. Please configure Tally first.' 
+        message: profileId 
+          ? 'Tally profile not found. Please check the profile ID.'
+          : 'Tally configuration not found. Please configure Tally first.' 
       });
     }
 
-    const { tally_ip, tally_port } = configResult.rows[0];
+    const { tally_ip, tally_port, profile_name, tally_company_name } = configResult.rows[0];
     const tallyUrl = `http://${tally_ip}:${tally_port}`;
 
     // Request ledger heads from Tally using XML
@@ -420,15 +466,15 @@ router.post('/sync-ledgers', async (req, res) => {
         { name: 'Purchase', code: 'PURCH001', category: 'Expense' },
       ];
 
-      // Save to database
+      // Save to database with org_id
       let savedCount = 0;
       for (const ledger of sampleLedgers) {
         try {
           await pool.query(
-            `INSERT INTO ledger (name, code, category, is_active, financial_year, created_at, updated_at)
-             VALUES ($1, $2, $3, true, $4, NOW(), NOW())
+            `INSERT INTO ledger (name, code, category, is_active, financial_year, org_id, created_at, updated_at)
+             VALUES ($1, $2, $3, true, $4, $5, NOW(), NOW())
              ON CONFLICT DO NOTHING`,
-            [ledger.name, ledger.code, ledger.category, '2024-25']
+            [ledger.name, ledger.code, ledger.category, '2024-25', orgId]
           );
           savedCount++;
         } catch (error) {
@@ -456,6 +502,235 @@ router.post('/sync-ledgers', async (req, res) => {
       error: error.message 
     });
   }
+});
+
+// Get chart of accounts (hierarchical view)
+router.get('/chart-of-accounts', async (req, res) => {
+  await chartOfAccountsHandler(req, res);
+});
+
+// Get all groups for an organization
+router.get('/groups', async (req, res) => {
+  try {
+    // Get org_id from header or query parameter
+    const orgId = req.headers['x-org-id'] || req.query.org_id;
+    const { id } = req.query;
+    
+    if (!orgId) {
+      return res.status(400).json({ error: 'Organization ID is required' });
+    }
+    
+    // If id is provided, get single group
+    if (id) {
+      const singleResult = await pool.query(
+        `SELECT tg.*, 
+                parent.name as parent_group_name,
+                parent.id as parent_group_id_ref
+         FROM tally_groups tg
+         LEFT JOIN tally_groups parent ON tg.parent_group_id = parent.id
+         WHERE tg.id = $1 AND tg.org_id = $2`,
+        [id, orgId]
+      );
+      if (singleResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Group not found' });
+      }
+      return res.json(singleResult.rows[0]);
+    }
+    
+    // Get all groups with parent information
+    const result = await pool.query(
+      `SELECT tg.*, 
+              parent.name as parent_group_name,
+              parent.id as parent_group_id_ref
+       FROM tally_groups tg
+       LEFT JOIN tally_groups parent ON tg.parent_group_id = parent.id
+       WHERE tg.org_id = $1 
+       ORDER BY tg.name ASC`,
+      [orgId]
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching groups:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
+  }
+});
+
+// Update a group
+router.put('/groups', async (req, res) => {
+  try {
+    const { id } = req.query;
+    const orgId = req.headers['x-org-id'] || req.body?.org_id || req.query.org_id;
+    
+    if (!orgId) {
+      return res.status(400).json({ error: 'Organization ID is required' });
+    }
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID is required' });
+    }
+    
+    const { name, code, parent_group, parent_group_id, group_type, alias } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    
+    // Prevent self-reference (a group cannot be its own parent)
+    if (parent_group_id && parseInt(parent_group_id) === parseInt(id)) {
+      return res.status(400).json({ error: 'A group cannot be its own parent' });
+    }
+    
+    // If parent_group_id is provided, validate it exists and belongs to same org
+    let finalParentGroupId = parent_group_id || null;
+    if (finalParentGroupId) {
+      const parentCheck = await pool.query(
+        'SELECT id FROM tally_groups WHERE id = $1 AND org_id = $2',
+        [finalParentGroupId, orgId]
+      );
+      if (parentCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Parent group not found or does not belong to this organization' });
+      }
+    }
+    
+    // If parent_group (name) is provided but parent_group_id is not, try to find it
+    if (parent_group && !finalParentGroupId) {
+      const parentNameCheck = await pool.query(
+        'SELECT id FROM tally_groups WHERE name = $1 AND org_id = $2',
+        [parent_group, orgId]
+      );
+      if (parentNameCheck.rows.length > 0) {
+        finalParentGroupId = parentNameCheck.rows[0].id;
+      }
+    }
+    
+    const updateResult = await pool.query(
+      `UPDATE tally_groups 
+       SET name = $1, code = $2, parent_group = $3, parent_group_id = $4, group_type = $5, alias = $6, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7 AND org_id = $8 
+       RETURNING *`,
+      [name, code || null, parent_group || null, finalParentGroupId, group_type || null, alias || null, id, orgId]
+    );
+    
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    
+    res.json(updateResult.rows[0]);
+  } catch (error) {
+    console.error('Error updating group:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
+  }
+});
+
+// Delete a group
+router.delete('/groups', async (req, res) => {
+  try {
+    const { id } = req.query;
+    const orgId = req.headers['x-org-id'] || req.body?.org_id || req.query.org_id;
+    
+    if (!orgId) {
+      return res.status(400).json({ error: 'Organization ID is required' });
+    }
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Group ID is required' });
+    }
+    
+    const deleteResult = await pool.query(
+      'DELETE FROM tally_groups WHERE id = $1 AND org_id = $2 RETURNING *',
+      [id, orgId]
+    );
+    
+    if (deleteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    
+    res.json({ success: true, message: 'Group deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
+  }
+});
+
+// Create a new group (optional - groups are usually synced from Tally)
+router.post('/groups', async (req, res) => {
+  try {
+    const orgId = req.headers['x-org-id'] || req.body?.org_id || req.query.org_id;
+    
+    if (!orgId) {
+      return res.status(400).json({ error: 'Organization ID is required' });
+    }
+    
+    const { name, code, parent_group, parent_group_id, group_type, alias } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    
+    // If parent_group_id is provided, validate it exists and belongs to same org
+    let finalParentGroupId = parent_group_id || null;
+    if (finalParentGroupId) {
+      const parentCheck = await pool.query(
+        'SELECT id FROM tally_groups WHERE id = $1 AND org_id = $2',
+        [finalParentGroupId, orgId]
+      );
+      if (parentCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Parent group not found or does not belong to this organization' });
+      }
+    }
+    
+    // If parent_group (name) is provided but parent_group_id is not, try to find it
+    if (parent_group && !finalParentGroupId) {
+      const parentNameCheck = await pool.query(
+        'SELECT id FROM tally_groups WHERE name = $1 AND org_id = $2',
+        [parent_group, orgId]
+      );
+      if (parentNameCheck.rows.length > 0) {
+        finalParentGroupId = parentNameCheck.rows[0].id;
+      }
+    }
+    
+    const insertResult = await pool.query(
+      `INSERT INTO tally_groups (name, code, parent_group, parent_group_id, group_type, alias, org_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [name, code || null, parent_group || null, finalParentGroupId, group_type || (finalParentGroupId ? 'Secondary' : 'Primary'), alias || null, orgId]
+    );
+    
+    res.status(201).json(insertResult.rows[0]);
+  } catch (error) {
+    console.error('Error creating group:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
+  }
+});
+
+// Sync masters from Tally
+router.post('/sync-masters', async (req, res) => {
+  await syncMastersHandler(req, res);
+});
+
+// Sync all masters from Tally (comprehensive sync)
+import syncAllMastersHandler from '../../api/tally/sync-all-masters.js';
+router.post('/sync-all-masters', async (req, res) => {
+  await syncAllMastersHandler(req, res);
+});
+
+// Chart of Accounts endpoint
+router.get('/chart-of-accounts', async (req, res) => {
+  await chartOfAccountsHandler(req, res);
 });
 
 export default router; 

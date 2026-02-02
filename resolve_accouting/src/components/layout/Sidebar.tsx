@@ -84,6 +84,9 @@ const Sidebar: React.FC = () => {
           icon: <Plug size={18} />,
           children: [
             { name: 'Tally Profiles', to: '/tally-config', icon: <Server size={16} /> },
+            { name: 'Sync All Masters', to: '/tally/sync-all-masters', icon: <RefreshCw size={16} /> },
+            { name: 'Chart of Accounts', to: '/tally/chart-of-accounts', icon: <FileText size={16} /> },
+            { name: 'Groups', to: '/tally/groups', icon: <FolderTree size={16} /> },
             { name: 'Ledgers', to: '/ledgers', icon: <BookOpen size={16} /> },
             { name: 'Sync Settings', to: '/tally-config', icon: <Settings size={16} /> },
             { name: 'Sync Logs', to: '/reports', icon: <FileBarChart size={16} /> },
@@ -232,7 +235,7 @@ const Sidebar: React.FC = () => {
             >
               <div className="flex items-center">
                 <div className="opacity-80">{item.icon}</div>
-                {!isCollapsed && <span className="ml-3 text-sm font-light">{item.name}</span>}
+                {!isCollapsed && <span className="ml-3 text-xs font-thin">{item.name}</span>}
               </div>
               {!isCollapsed && (
                 <div className="ml-auto">
@@ -266,7 +269,7 @@ const Sidebar: React.FC = () => {
               }
             >
               <div className="opacity-80">{item.icon}</div>
-              {!isCollapsed && <span className="ml-3 text-sm font-light">{item.name}</span>}
+              {!isCollapsed && <span className="ml-3 text-xs font-thin">{item.name}</span>}
             </NavLink>
           </li>
         );
@@ -286,7 +289,7 @@ const Sidebar: React.FC = () => {
             >
               <div className="flex items-center">
                 <div className="opacity-70">{item.icon}</div>
-                <span className="ml-2 text-sm font-light">{item.name}</span>
+                <span className="ml-2 text-xs font-thin">{item.name}</span>
               </div>
               {isExpanded ? (
                 <ChevronDown size={12} className="text-gray-500" />
@@ -335,9 +338,9 @@ const Sidebar: React.FC = () => {
             }
           >
             <div className="opacity-70">{item.icon}</div>
-            <span className="ml-2 text-sm font-light">{item.name}</span>
+            <span className="ml-2 text-xs font-thin">{item.name}</span>
             {item.badge && (
-              <span className="ml-auto text-xs bg-secondary-500 text-white px-1.5 py-0.5 rounded font-light">
+              <span className="ml-auto text-xs bg-secondary-500 text-white px-1.5 py-0.5 rounded font-thin">
                 {item.badge}
               </span>
             )}
@@ -392,17 +395,17 @@ const Sidebar: React.FC = () => {
             {!isCollapsed && (
               <div className="flex items-center">
                 <div className="w-8 h-8 bg-secondary-500 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-lg font-light">₹</span>
+                  <span className="text-white text-lg font-thin">₹</span>
                 </div>
                 <div className="ml-3">
-                  <div className="text-white text-lg font-light tracking-wide">Resolve Pay</div>
-                  <div className="text-gray-400 text-xs font-light">Accounting Module</div>
+                  <div className="text-white text-base font-thin tracking-wide">Resolve Pay</div>
+                  <div className="text-gray-400 text-xs font-thin">Accounting Module</div>
                 </div>
               </div>
             )}
             {isCollapsed && (
               <div className="w-8 h-8 bg-secondary-500 rounded-lg flex items-center justify-center">
-                <span className="text-white text-lg font-light">₹</span>
+                <span className="text-white text-lg font-thin">₹</span>
               </div>
             )}
             <button
@@ -421,8 +424,8 @@ const Sidebar: React.FC = () => {
                   <User size={18} className="text-secondary-400" />
                 </div>
                 <div className="ml-3 flex-1 min-w-0">
-                  <div className="text-white text-sm font-light truncate">{userName}</div>
-                  <div className="text-gray-400 text-xs font-light">ID: {userId}</div>
+                  <div className="text-white text-xs font-thin truncate">{userName}</div>
+                  <div className="text-gray-400 text-xs font-thin">ID: {userId}</div>
                 </div>
               </div>
             </div>
@@ -438,7 +441,7 @@ const Sidebar: React.FC = () => {
           {/* Footer */}
           <div className="p-4 border-t border-gray-700/50">
             {!isCollapsed && (
-              <div className="text-gray-400 text-xs font-light text-center">
+              <div className="text-gray-400 text-xs font-thin text-center">
                 Accounting Module v0.1.0
               </div>
             )}

@@ -26,11 +26,11 @@ class PromptIntentParser {
 
   // Action keywords
   private static actionKeywords = {
-    sync: ['sync', 'synchronize', 'push', 'send', 'export', 'transfer'],
-    push: ['push', 'send', 'export', 'transfer'],
-    view: ['view', 'show', 'display', 'see', 'list'],
-    export: ['export', 'download', 'extract'],
-    report: ['report', 'generate', 'create'],
+    sync: ['sync', 'synchronize', 'synchronise', 'update', 'updates', 'updating', 'push', 'send', 'export', 'transfer', 'sync to', 'push to', 'update to', 'send to'],
+    push: ['push', 'send', 'export', 'transfer', 'update', 'updates', 'updating', 'push to', 'update to', 'send to'],
+    view: ['view', 'show', 'display', 'see', 'list', 'open', 'navigate to'],
+    export: ['export', 'download', 'extract', 'save as'],
+    report: ['report', 'generate', 'create', 'print'],
   };
 
   // Target system keywords
@@ -72,6 +72,18 @@ class PromptIntentParser {
       if (result.module) break;
     }
 
+    // Parse target system first (needed for action inference)
+    for (const [target, keywords] of Object.entries(this.targetKeywords)) {
+      for (const keyword of keywords) {
+        if (lowerPrompt.includes(keyword)) {
+          result.targetSystem = target as any;
+          confidenceScore += 0.2;
+          break;
+        }
+      }
+      if (result.targetSystem) break;
+    }
+
     // Parse action
     for (const [action, keywords] of Object.entries(this.actionKeywords)) {
       for (const keyword of keywords) {
@@ -84,16 +96,21 @@ class PromptIntentParser {
       if (result.action) break;
     }
 
-    // Parse target system
-    for (const [target, keywords] of Object.entries(this.targetKeywords)) {
-      for (const keyword of keywords) {
-        if (lowerPrompt.includes(keyword)) {
-          result.targetSystem = target as any;
-          confidenceScore += 0.2;
-          break;
-        }
+    // If no action found but we have module and target system, infer it's a sync/push action
+    if (!result.action && result.module && result.targetSystem) {
+      result.action = 'push'; // Default to push for sync operations
+      confidenceScore += 0.2;
+    }
+
+    // If we have action but no target system, try to infer from context
+    if (result.action && (result.action === 'sync' || result.action === 'push') && !result.targetSystem) {
+      if (lowerPrompt.includes('tally')) {
+        result.targetSystem = 'tally';
+        confidenceScore += 0.15;
+      } else if (lowerPrompt.includes('oracle')) {
+        result.targetSystem = 'oracle';
+        confidenceScore += 0.15;
       }
-      if (result.targetSystem) break;
     }
 
     // Parse financial year

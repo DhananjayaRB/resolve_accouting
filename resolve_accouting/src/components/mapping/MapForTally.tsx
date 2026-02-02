@@ -3,9 +3,10 @@ import { useApp } from '../../context/AppContext';
 import { getStoredToken } from '../../utils/auth';
 import { generateTallyXML, pushToTally } from '../../utils/tally';
 import toast from 'react-hot-toast';
-import { FileText, BarChart3, Link2, CheckCircle2, Loader2, ArrowRight, ArrowLeft, Play, Eye, Send, Clock, Bell, FileCheck, TrendingUp } from 'lucide-react';
+import { FileText, BarChart3, Link2, CheckCircle2, Loader2, ArrowRight, ArrowLeft, Play, Eye, Send, Clock, Bell, FileCheck, TrendingUp, Zap } from 'lucide-react';
 import InfoIcon from '../common/InfoIcon';
 import Loader from '../common/Loader';
+import LedgerSelect from '../common/LedgerSelect';
 
 interface FinancialYear {
   customer_year_details_id: string;
@@ -82,9 +83,10 @@ interface PayrollResponse {
 
 const MapForTally: React.FC = () => {
   console.log('[MapForTally] Component rendering');
-  const { payrollItems, ledgerHeads, payrollMappings } = useApp();
+  const { payrollItems, ledgerHeads, payrollMappings, addPayrollMapping, updatePayrollMapping } = useApp();
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [selectedType, setSelectedType] = useState<'Salary' | 'Payment'>('Salary');
   const [payPeriods, setPayPeriods] = useState<PayPeriod[]>([]);
   const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -102,6 +104,8 @@ const MapForTally: React.FC = () => {
   const [syncedTransactions, setSyncedTransactions] = useState(0);
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState(20);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [isAutoMapping, setIsAutoMapping] = useState(false);
+  const [editingPayHeadMapping, setEditingPayHeadMapping] = useState<string | null>(null);
   const [tallyConfig] = useState({
     ip: '192.168.20.82',
     port: 9000
@@ -131,14 +135,14 @@ const MapForTally: React.FC = () => {
     }
   }, [selectedYear]);
 
-  // Fetch payroll data when period is selected
+  // Fetch payroll data when period or type is selected
   useEffect(() => {
-    if (selectedPeriod) {
+    if (selectedPeriod && selectedType) {
       fetchPayrollData();
     } else {
       setPayrollData([]);
     }
-  }, [selectedPeriod]);
+  }, [selectedPeriod, selectedType]);
 
   const fetchPayrollData = async () => {
     try {
@@ -155,12 +159,15 @@ const MapForTally: React.FC = () => {
         return;
       }
 
+      // Map selectedType to pay_type_id: "0" for Salary, "1" for Payment (adjust based on your API)
+      const payTypeId = selectedType === 'Salary' ? "0" : "1";
+      
       const requestData = {
         financial_year_id: selectedYear,
         pay_period_id: "4",
         period_start_date: selectedPeriodData.pay_period_start_date,
         period_end_date: selectedPeriodData.pay_period_end_date,
-        pay_type_id: "0",
+        pay_type_id: payTypeId,
         worker_type_id: "",
         type_id: [0],
         sub_type_id: [],
@@ -314,6 +321,92 @@ const MapForTally: React.FC = () => {
     return payValue?.pay_value || '-';
   };
 
+  // Check if a pay head is an arrears item
+  const isArrearsPayHead = (payHeadName: string): boolean => {
+    const nameLower = payHeadName.toLowerCase().trim();
+    return nameLower.includes('arrears') || nameLower.includes('arrear');
+  };
+
+  // Extract base name from arrears pay head (e.g., "Basic Salary Arrears" -> "Basic Salary")
+  const extractBaseNameFromArrears = (payrollItemName: string): string | null => {
+    const nameLower = payrollItemName.toLowerCase().trim();
+    
+    // Check if it contains "arrears" or "arrear"
+    if (nameLower.includes('arrears') || nameLower.includes('arrear')) {
+      // Remove "arrears" or "arrear" from the end (case-insensitive)
+      const baseName = payrollItemName
+        .replace(/\s+arrears?$/i, '')
+        .trim();
+      
+      if (baseName && baseName.length > 0) {
+        return baseName;
+      }
+    }
+    
+    return null;
+  };
+
+  // Generate payroll_item_id with prefix for arrears items
+  const getPayrollItemIdForMapping = (payHeadName: string, originalPayHeadId: string | null): string => {
+    if (!originalPayHeadId) {
+      return '';
+    }
+    
+    // If it's an arrears pay head, prefix the ID with "ARR_"
+    if (isArrearsPayHead(payHeadName)) {
+      return `ARR_${originalPayHeadId}`;
+    }
+    
+    return originalPayHeadId;
+  };
+
+  // Get original payroll_item_id from prefixed ID (for arrears)
+  const getOriginalPayrollItemId = (prefixedId: string): string => {
+    if (prefixedId.startsWith('ARR_')) {
+      return prefixedId.replace('ARR_', '');
+    }
+    return prefixedId;
+  };
+
+  // Check for exact name match (case-insensitive, trimmed)
+  const isExactMatch = (str1: string, str2: string): boolean => {
+    const s1 = str1.toLowerCase().trim();
+    const s2 = str2.toLowerCase().trim();
+    return s1 === s2;
+  };
+
+  // Find best matching ledger for a pay head (with arrears support)
+  const findBestMatchForPayHead = (payHeadName: string): { ledger: any; score: number } | null => {
+    const activeLedgerHeads = ledgerHeads.filter(l => l.isActive);
+    
+    // First, try exact name match
+    for (const ledger of activeLedgerHeads) {
+      const isMapped = payrollMappings.some(m => m.ledgerHeadId === ledger.id);
+      if (isMapped) continue;
+
+      if (isExactMatch(payHeadName, ledger.name)) {
+        return { ledger, score: 1.0 };
+      }
+    }
+
+    // If no exact match, check if this is an arrears pay head
+    const baseName = extractBaseNameFromArrears(payHeadName);
+    if (baseName) {
+      // Try to find a ledger that exactly matches the base name
+      for (const ledger of activeLedgerHeads) {
+        const isMapped = payrollMappings.some(m => m.ledgerHeadId === ledger.id);
+        if (isMapped) continue;
+
+        if (isExactMatch(baseName, ledger.name)) {
+          console.log(`Auto-mapping arrears: "${payHeadName}" -> "${ledger.name}" (base name: "${baseName}")`);
+          return { ledger, score: 1.0 };
+        }
+      }
+    }
+
+    return null;
+  };
+
   // Calculate pay head wise totals for Summary tab
   const payHeadSummary = useMemo(() => {
     if (payrollData.length === 0 || payrollHeaders.length === 0) return [];
@@ -327,19 +420,50 @@ const MapForTally: React.FC = () => {
       }, 0);
 
       // Find linked ledger for this pay head
-      const payrollItem = payrollItems.find(item => 
+      // For arrears, try to find the base payroll item first
+      let payrollItem = payrollItems.find(item => 
         item.name === header.text || 
         item.code === header.dataField
       );
-      const mapping = payrollItem ? payrollMappings.find(m => m.payrollItemId === payrollItem.id) : null;
+      
+      // If not found and it's an arrears item, try to find the base item
+      if (!payrollItem && isArrearsPayHead(header.text)) {
+        const baseName = extractBaseNameFromArrears(header.text);
+        if (baseName) {
+          payrollItem = payrollItems.find(item => 
+            item.name === baseName || 
+            isExactMatch(item.name, baseName)
+          );
+        }
+      }
+      
+      // Check for mapping with original ID or prefixed ID (for arrears)
+      let mapping = null;
+      if (payrollItem) {
+        const originalId = payrollItem.id;
+        const prefixedId = isArrearsPayHead(header.text) ? `ARR_${originalId}` : originalId;
+        
+        // First check for prefixed ID (arrears)
+        mapping = payrollMappings.find(m => m.payrollItemId === prefixedId);
+        // If not found, check for original ID
+        if (!mapping) {
+          mapping = payrollMappings.find(m => m.payrollItemId === originalId);
+        }
+      }
+      
       const linkedLedger = mapping ? ledgerHeads.find(l => l.id === mapping.ledgerHeadId) : null;
 
       return {
         payHeadName: header.text,
         payHeadCode: header.dataField,
+        payHeadId: payrollItem?.id || null,
+        mappingId: mapping?.id || null,
         total,
         linkedLedger: linkedLedger?.name || 'Not Mapped',
+        linkedLedgerId: linkedLedger?.id || null,
         linkedLedgerCode: linkedLedger?.code || '-',
+        linkedLedgerGroup: linkedLedger?.parentGroupName || null, // Parent Group (Main Category)
+        linkedLedgerSubGroup: linkedLedger?.groupName || null, // Sub Group
         employeeCount: payrollData.filter(item => {
           const value = getPayValue(item, header.dataField);
           return value !== '-' && Number(value) !== 0;
@@ -357,6 +481,146 @@ const MapForTally: React.FC = () => {
       setPushLogs([]);
     }
   }, [payrollData.length, selectedYear, selectedPeriod]);
+
+  // Handle auto-mapping for unmapped pay heads
+  const handleAutoMapPayHeads = async () => {
+    if (!window.confirm('This will automatically map unmapped pay heads to ledger heads with exact matching names (including arrears). Continue?')) {
+      return;
+    }
+
+    setIsAutoMapping(true);
+    let mappedCount = 0;
+    let skippedCount = 0;
+
+    try {
+      const unmappedPayHeads = payHeadSummary.filter(item => item.linkedLedger === 'Not Mapped');
+
+      if (unmappedPayHeads.length === 0) {
+        toast.info('All pay heads are already mapped');
+        setIsAutoMapping(false);
+        return;
+      }
+
+      for (const payHead of unmappedPayHeads) {
+        const match = findBestMatchForPayHead(payHead.payHeadName);
+        
+        if (match && match.score === 1.0) {
+          try {
+            // If payHeadId is null, try to find the base payroll item for arrears
+            let finalPayHeadId = payHead.payHeadId;
+            if (!finalPayHeadId && isArrearsPayHead(payHead.payHeadName)) {
+              const baseName = extractBaseNameFromArrears(payHead.payHeadName);
+              if (baseName) {
+                const basePayrollItem = payrollItems.find(item => 
+                  item.name === baseName || 
+                  isExactMatch(item.name, baseName)
+                );
+                if (basePayrollItem) {
+                  finalPayHeadId = basePayrollItem.id;
+                  console.log(`Found base payroll item for arrears "${payHead.payHeadName}": "${baseName}" (ID: ${finalPayHeadId})`);
+                }
+              }
+            }
+
+            if (finalPayHeadId) {
+              // Get the payroll_item_id with prefix for arrears
+              const payrollItemIdForMapping = getPayrollItemIdForMapping(payHead.payHeadName, finalPayHeadId);
+              
+              // Payroll item exists, create/update mapping with prefixed ID if arrears
+              await addPayrollMapping({
+                payrollItemId: payrollItemIdForMapping,
+                payrollItemName: payHead.payHeadName,
+                ledgerHeadId: match.ledger.id,
+                ledgerHeadName: match.ledger.name,
+                financialYear: financialYears.find(y => y.customer_year_details_id === selectedYear)?.year || new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)
+              }, true); // Silent mode
+              
+              console.log(`Mapped "${payHead.payHeadName}" (ID: ${payrollItemIdForMapping}) to "${match.ledger.name}"`);
+              mappedCount++;
+            } else {
+              // Payroll item doesn't exist, skip
+              console.warn(`Payroll item not found for pay head: ${payHead.payHeadName}. Please ensure the base payroll item exists.`);
+              skippedCount++;
+            }
+          } catch (error) {
+            console.error(`Error mapping ${payHead.payHeadName}:`, error);
+            skippedCount++;
+          }
+        } else {
+          skippedCount++;
+        }
+      }
+
+      if (mappedCount > 0) {
+        toast.success(`Auto-mapped ${mappedCount} pay head${mappedCount > 1 ? 's' : ''}${skippedCount > 0 ? `. ${skippedCount} skipped (no match found)` : ''}`);
+      } else {
+        toast.info(`No exact name matches found. ${skippedCount} pay head${skippedCount > 1 ? 's' : ''} skipped.`);
+      }
+    } catch (error) {
+      console.error('Error during auto-mapping:', error);
+      toast.error('Error during auto-mapping');
+    } finally {
+      setIsAutoMapping(false);
+    }
+  };
+
+  // Handle manual mapping change
+  const handlePayHeadMappingChange = async (payHeadName: string, payHeadId: string | null, ledgerId: string) => {
+    if (!ledgerId) {
+      toast.error('Please select a ledger');
+      return;
+    }
+
+    const ledger = ledgerHeads.find(l => l.id === ledgerId);
+    if (!ledger) {
+      toast.error('Selected ledger not found');
+      return;
+    }
+
+    // If payHeadId is null, try to find the base payroll item for arrears
+    let finalPayHeadId = payHeadId;
+    if (!finalPayHeadId && isArrearsPayHead(payHeadName)) {
+      const baseName = extractBaseNameFromArrears(payHeadName);
+      if (baseName) {
+        const basePayrollItem = payrollItems.find(item => 
+          item.name === baseName || 
+          isExactMatch(item.name, baseName)
+        );
+        if (basePayrollItem) {
+          finalPayHeadId = basePayrollItem.id;
+          console.log(`Found base payroll item for arrears "${payHeadName}": "${baseName}" (ID: ${finalPayHeadId})`);
+        }
+      }
+    }
+
+    if (!finalPayHeadId) {
+      toast.error('Payroll item not found for this pay head. Please ensure the base payroll item exists (e.g., "Basic Salary" for "Basic Salary Arrears").');
+      return;
+    }
+
+    try {
+      const financialYear = financialYears.find(y => y.customer_year_details_id === selectedYear)?.year || 
+                            new Date().getFullYear() + '-' + (new Date().getFullYear() + 1);
+
+      // Get the payroll_item_id with prefix for arrears
+      const payrollItemIdForMapping = getPayrollItemIdForMapping(payHeadName, finalPayHeadId);
+
+      await addPayrollMapping({
+        payrollItemId: payrollItemIdForMapping,
+        payrollItemName: payHeadName,
+        ledgerHeadId: ledgerId,
+        ledgerHeadName: ledger.name,
+        financialYear: financialYear
+      });
+
+      console.log(`Manually mapped "${payHeadName}" (ID: ${payrollItemIdForMapping}) to "${ledger.name}"`);
+      toast.success(`Mapped "${payHeadName}" to "${ledger.name}"`);
+      setEditingPayHeadMapping(null);
+    } catch (error) {
+      console.error('Error mapping pay head:', error);
+      toast.error('Failed to map pay head');
+    }
+  };
 
   const handleNextStep = () => {
     if (currentStep < 3) {
@@ -459,8 +723,8 @@ const MapForTally: React.FC = () => {
   };
 
   const handlePushToTally = async () => {
-    if (!selectedYear || !selectedPeriod) {
-      toast.error('Please select both Financial Year and Period');
+    if (!selectedYear || !selectedPeriod || !selectedType) {
+      toast.error('Please select Type, Financial Year, and Period');
       return;
     }
 
@@ -673,7 +937,23 @@ const MapForTally: React.FC = () => {
                     
                     {/* Selection Boxes - Similar to Step 2's summary boxes */}
                     <div className="bg-gradient-to-br from-secondary-50 to-blue-50 rounded-lg p-2 mb-2">
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-white rounded p-1.5 border border-gray-200">
+                          <label className="block text-[10px] text-gray-500 mb-0.5">Type</label>
+                          <select
+                            data-field="transaction-type"
+                            value={selectedType}
+                            onChange={(e) => {
+                              setSelectedType(e.target.value as 'Salary' | 'Payment');
+                              setSelectedPeriod('');
+                              setPayrollData([]);
+                            }}
+                            className="w-full h-6 text-xs border-0 focus:ring-0 p-0 font-bold text-gray-800 bg-transparent"
+                          >
+                            <option value="Salary">Salary</option>
+                            <option value="Payment">Payment</option>
+                          </select>
+                        </div>
                         <div className="bg-white rounded p-1.5 border border-gray-200">
                           <label className="block text-[10px] text-gray-500 mb-0.5">Financial Year</label>
                           <select
@@ -743,7 +1023,7 @@ const MapForTally: React.FC = () => {
                   {!isLoadingPayroll && payrollData.length > 0 && (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                       <div className="bg-white rounded-lg p-2 border border-gray-200 shadow-sm flex-1 flex flex-col min-h-0">
-                        <div className="border-b border-gray-200 mb-1.5 flex-shrink-0">
+                        <div className="border-b border-gray-200 mb-1.5 flex-shrink-0 flex items-center justify-between">
                           <nav className="flex space-x-3">
                             <button
                               onClick={() => setActiveTab('summary')}
@@ -766,6 +1046,25 @@ const MapForTally: React.FC = () => {
                               Detailed
                             </button>
                           </nav>
+                          {activeTab === 'summary' && (
+                            <button
+                              onClick={handleAutoMapPayHeads}
+                              disabled={isAutoMapping}
+                              className="btn btn-secondary flex items-center gap-1.5 text-xs py-1 px-2"
+                            >
+                              {isAutoMapping ? (
+                                <>
+                                  <Loader2 size={12} className="animate-spin" />
+                                  Mapping...
+                                </>
+                              ) : (
+                                <>
+                                  <Zap size={12} />
+                                  Auto Map
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
 
                       {activeTab === 'summary' ? (
@@ -777,7 +1076,8 @@ const MapForTally: React.FC = () => {
                                 <th className="table-header-cell text-right">Total Amount</th>
                                 <th className="table-header-cell text-center">Employees</th>
                                 <th className="table-header-cell">Linked Ledger</th>
-                                <th className="table-header-cell">Ledger Code</th>
+                                <th className="table-header-cell">Group</th>
+                                <th className="table-header-cell">Sub Group</th>
                               </tr>
                             </thead>
                             <tbody className="table-body">
@@ -792,16 +1092,81 @@ const MapForTally: React.FC = () => {
                                   </td>
                                   <td className="table-cell text-center">{item.employeeCount}</td>
                                   <td className="table-cell">
-                                    {item.linkedLedger !== 'Not Mapped' ? (
+                                    {editingPayHeadMapping === item.payHeadName ? (
+                                      <div className="min-w-[200px]">
+                                        <LedgerSelect
+                                          ledgers={ledgerHeads.filter(ledger => {
+                                            // Include the currently mapped ledger for this item
+                                            if (item.linkedLedgerId === ledger.id) {
+                                              return true;
+                                            }
+                                            // Exclude ledgers that are mapped to other items
+                                            return !payrollMappings.some(mapping => 
+                                              mapping.ledgerHeadId === ledger.id && 
+                                              mapping.payrollItemId !== item.payHeadId
+                                            );
+                                          })}
+                                          value={item.linkedLedgerId || ''}
+                                          onChange={(ledgerId) => {
+                                            if (ledgerId) {
+                                              handlePayHeadMappingChange(item.payHeadName, item.payHeadId, ledgerId);
+                                            } else {
+                                              setEditingPayHeadMapping(null);
+                                            }
+                                          }}
+                                          placeholder="Select Ledger"
+                                          showCode={true}
+                                        />
+                                        <button
+                                          onClick={() => setEditingPayHeadMapping(null)}
+                                          className="text-xs text-gray-500 mt-1"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    ) : item.linkedLedger !== 'Not Mapped' ? (
                                       <div className="flex items-center gap-2">
                                         <Link2 size={14} className="text-secondary-600" />
                                         <span>{item.linkedLedger}</span>
+                                        <button
+                                          onClick={() => setEditingPayHeadMapping(item.payHeadName)}
+                                          className="text-xs text-secondary-600 hover:text-secondary-700 ml-1"
+                                          title="Change mapping"
+                                        >
+                                          Edit
+                                        </button>
                                       </div>
                                     ) : (
-                                      <span className="text-gray-400 italic">{item.linkedLedger}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-400 italic">{item.linkedLedger}</span>
+                                        <button
+                                          onClick={() => setEditingPayHeadMapping(item.payHeadName)}
+                                          className="text-xs text-secondary-600 hover:text-secondary-700 ml-1"
+                                          title="Map to ledger"
+                                        >
+                                          Map
+                                        </button>
+                                      </div>
                                     )}
                                   </td>
-                                  <td className="table-cell">{item.linkedLedgerCode}</td>
+                                  <td className="table-cell">
+                                    {item.linkedLedgerGroup ? (
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                        {item.linkedLedgerGroup}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </td>
+                                  <td className="table-cell">
+                                    {item.linkedLedgerSubGroup ? (
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                        {item.linkedLedgerSubGroup}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -860,7 +1225,11 @@ const MapForTally: React.FC = () => {
                       Preview Data to Push
                     </h4>
                     <div className="bg-gradient-to-br from-secondary-50 to-blue-50 rounded-lg p-3 space-y-2">
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-6 gap-2">
+                        <div className="bg-white rounded-lg p-2 border border-gray-200">
+                          <span className="text-xs text-gray-500">Type</span>
+                          <p className="font-bold text-xs text-gray-800 mt-0.5">{selectedType}</p>
+                        </div>
                         <div className="bg-white rounded-lg p-2 border border-gray-200">
                           <span className="text-xs text-gray-500">Financial Year</span>
                           <p className="font-bold text-xs text-gray-800 mt-0.5">{financialYears.find(y => y.customer_year_details_id === selectedYear)?.year || '-'}</p>
@@ -1290,7 +1659,7 @@ const MapForTally: React.FC = () => {
                     <button
                       data-step="next"
                       onClick={handleNextStep}
-                      disabled={!selectedYear || !selectedPeriod || payrollData.length === 0 || pushStatus === 'running'}
+                      disabled={!selectedType || !selectedYear || !selectedPeriod || payrollData.length === 0 || pushStatus === 'running'}
                       className="btn btn-primary flex items-center shadow-md hover:shadow-lg transition-all text-xs py-1.5 px-3"
                     >
                       Next

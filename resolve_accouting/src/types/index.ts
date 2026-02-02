@@ -10,6 +10,8 @@ export interface LedgerHead {
   createdAt: string;
   updatedAt: string;
   financialYear?: string; // For tracking year-specific ledgers
+  groupName?: string | null; // Sub Group name from tally_groups table
+  parentGroupName?: string | null; // Parent Group (Main Category) name
 }
 
 // Payroll Types

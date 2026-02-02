@@ -14,9 +14,41 @@ import {
 import toast from 'react-hot-toast';
 import { getStoredToken, getStoredUserInfo } from '../utils/auth';
 
-// API URLs
-const LOCAL_API_URL = 'http://localhost:3001/api';
+// API URLs - Support environment variables and dynamic host detection
+const getApiUrl = () => {
+  // Check for environment variable first
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // In production or when using Vite proxy, use relative URLs
+  if (import.meta.env.PROD || import.meta.env.DEV) {
+    return '/api';
+  }
+  
+  // Fallback: detect the current host
+  const hostname = window.location.hostname;
+  const protocol = window.location.protocol;
+  const port = import.meta.env.VITE_API_PORT || '3001';
+  
+  // If accessing via IP address or different hostname, use that
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    return `${protocol}//${hostname}:${port}/api`;
+  }
+  
+  // Default to localhost for local development
+  return `http://localhost:${port}/api`;
+};
+
+const API_URL = getApiUrl();
+const LOCAL_API_URL = API_URL;
 const UAT_API_URL = 'https://apiv1.resolvepay.in';
+
+// Log API URL for debugging (only in development)
+if (import.meta.env.DEV) {
+  console.log('API URL configured:', API_URL);
+  console.log('Current hostname:', window.location.hostname);
+}
 
 interface PayrollMapping {
   id: string;
@@ -92,6 +124,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!response.ok) throw new Error('Failed to fetch ledgers');
       const data = await response.json();
       console.log('Raw ledger data:', data);
+      console.log('Sample ledger with group_name:', data.find((l: any) => l.group_name));
       
       // Transform the data to match our expected format
       const transformedData = data.map((ledger: any) => ({
@@ -103,11 +136,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         category: ledger.category || 'Expense',
         description: ledger.description || '',
         financialYear: ledger.financial_year || '',
+        groupName: ledger.group_name || null, // Sub Group name
+        parentGroupName: ledger.parent_group_name || null, // Parent Group (Main Category)
         createdAt: ledger.created_at || new Date().toISOString(),
         updatedAt: ledger.updated_at || new Date().toISOString()
       }));
       
       console.log('Transformed ledger data:', transformedData);
+      console.log('Ledgers with groups:', transformedData.filter((l: any) => l.groupName));
       setLedgerHeads(transformedData);
     } catch (error) {
       console.error('Error fetching ledgers:', error);
@@ -530,8 +566,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deletePayrollMapping = async (id: string) => {
     try {
-      const response = await fetch(`${LOCAL_API_URL}/payroll-mappings/${id}`, {
-        method: 'DELETE'
+      const { org_id } = getStoredUserInfo();
+      if (!org_id) {
+        throw new Error('Organization ID is required');
+      }
+
+      const response = await fetch(`${LOCAL_API_URL}/payroll-mappings/${id}?org_id=${org_id}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Org-Id': org_id
+        }
       });
 
       if (!response.ok) {

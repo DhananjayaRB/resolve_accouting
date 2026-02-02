@@ -12,6 +12,9 @@ import MapForTally from './components/mapping/MapForTally';
 import ReportsPage from './components/reports/ReportsPage';
 import ConfigurationPage from './components/configuration/ConfigurationPage';
 import TallyConfigPage from './components/configuration/TallyConfigPage';
+import TallySyncAllMastersPage from './components/tally/TallySyncAllMastersPage';
+import GroupsPage from './components/tally/GroupsPage';
+import ChartOfAccountsPage from './components/tally/ChartOfAccountsPage';
 import ComingSoon from './components/common/ComingSoon';
 import OracleConnectionPage from './components/oracle/OracleConnectionPage';
 import OracleMappingPage from './components/oracle/OracleMappingPage';
@@ -55,6 +58,9 @@ function App() {
             
             {/* Integrations - Tally */}
             <Route path="tally-config" element={<TallyConfigPage />} />
+            <Route path="tally/sync-all-masters" element={<TallySyncAllMastersPage />} />
+            <Route path="tally/chart-of-accounts" element={<ChartOfAccountsPage />} />
+            <Route path="tally/groups" element={<GroupsPage />} />
             <Route path="ledgers" element={<LedgersPage />} />
             
             {/* Integrations - Oracle */}

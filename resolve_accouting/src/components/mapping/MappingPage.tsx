@@ -49,7 +49,19 @@ const MappingPage: React.FC = () => {
   console.log('Active ledger heads:', activeLedgerHeads);
   
   // Find existing mappings for each payroll item
-  const getExistingMapping = (payrollItemId: string) => {
+  // Check both original ID and prefixed ID (for arrears)
+  const getExistingMapping = (payrollItemId: string, payrollItemName?: string) => {
+    // First check for prefixed ID (if it's an arrears item)
+    if (payrollItemName && isArrearsPayHead(payrollItemName)) {
+      const prefixedId = `ARR_${payrollItemId}`;
+      const prefixedMapping = payrollMappings.find(mapping => mapping.payrollItemId === prefixedId);
+      if (prefixedMapping) {
+        console.log('Finding mapping for payroll item (prefixed):', prefixedId, 'Found:', prefixedMapping);
+        return prefixedMapping;
+      }
+    }
+    
+    // Check for original ID
     const mapping = payrollMappings.find(mapping => mapping.payrollItemId === payrollItemId);
     console.log('Finding mapping for payroll item:', payrollItemId, 'Found:', mapping);
     return mapping;
@@ -134,7 +146,6 @@ const MappingPage: React.FC = () => {
 
   const handleMappingChange = async (payrollItemId: string, ledgerHeadId: string) => {
     try {
-      const existingMapping = getExistingMapping(payrollItemId);
       const payrollItem = payrollItems.find(item => item.id === payrollItemId);
       const ledgerHead = activeLedgerHeads.find(head => head.id === ledgerHeadId);
 
@@ -142,8 +153,13 @@ const MappingPage: React.FC = () => {
         throw new Error('Invalid payroll item or ledger head');
       }
 
+      // Get the payroll_item_id with prefix for arrears
+      const payrollItemIdForMapping = getPayrollItemIdForMapping(payrollItem.name, payrollItemId);
+      const existingMapping = getExistingMapping(payrollItemId, payrollItem.name);
+
       console.log('Updating mapping:', {
-        payrollItemId,
+        originalPayrollItemId: payrollItemId,
+        payrollItemIdForMapping,
         ledgerHeadId,
         existingMapping,
         payrollItem,
@@ -157,7 +173,7 @@ const MappingPage: React.FC = () => {
         });
       } else {
         const newMapping = await addPayrollMapping({
-          payrollItemId,
+          payrollItemId: payrollItemIdForMapping,
           payrollItemName: payrollItem.name,
           ledgerHeadId,
           ledgerHeadName: ledgerHead.name,
@@ -327,111 +343,99 @@ const MappingPage: React.FC = () => {
     }
   };
 
-  // Calculate string similarity using Levenshtein distance
-  const calculateSimilarity = (str1: string, str2: string): number => {
+  // Check for exact name match (case-insensitive, trimmed)
+  const isExactMatch = (str1: string, str2: string): boolean => {
     const s1 = str1.toLowerCase().trim();
     const s2 = str2.toLowerCase().trim();
+    return s1 === s2;
+  };
+
+  // Check if a payroll item is an arrears item
+  const isArrearsPayHead = (payHeadName: string): boolean => {
+    const nameLower = payHeadName.toLowerCase().trim();
+    return nameLower.includes('arrears') || nameLower.includes('arrear');
+  };
+
+  // Extract base name from arrears pay head (e.g., "Basic Salary Arrears" -> "Basic Salary")
+  const extractBaseNameFromArrears = (payrollItemName: string): string | null => {
+    const nameLower = payrollItemName.toLowerCase().trim();
     
-    // Exact match
-    if (s1 === s2) return 1.0;
-    
-    // Check if one contains the other
-    if (s1.includes(s2) || s2.includes(s1)) {
-      return 0.8;
-    }
-    
-    // Check for common words
-    const words1 = s1.split(/\s+/);
-    const words2 = s2.split(/\s+/);
-    const commonWords = words1.filter(w => words2.includes(w) && w.length > 2);
-    if (commonWords.length > 0) {
-      const similarity = commonWords.length / Math.max(words1.length, words2.length);
-      return similarity * 0.7;
-    }
-    
-    // Calculate Levenshtein distance
-    const len1 = s1.length;
-    const len2 = s2.length;
-    const matrix: number[][] = [];
-    
-    for (let i = 0; i <= len1; i++) {
-      matrix[i] = [i];
-    }
-    
-    for (let j = 0; j <= len2; j++) {
-      matrix[0][j] = j;
-    }
-    
-    for (let i = 1; i <= len1; i++) {
-      for (let j = 1; j <= len2; j++) {
-        if (s1[i - 1] === s2[j - 1]) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j - 1] + 1
-          );
-        }
+    // Check if it contains "arrears" or "arrear"
+    if (nameLower.includes('arrears') || nameLower.includes('arrear')) {
+      // Remove "arrears" or "arrear" from the end (case-insensitive)
+      const baseName = payrollItemName
+        .replace(/\s+arrears?$/i, '')
+        .trim();
+      
+      if (baseName && baseName.length > 0) {
+        return baseName;
       }
     }
     
-    const distance = matrix[len1][len2];
-    const maxLen = Math.max(len1, len2);
-    return 1 - (distance / maxLen);
+    return null;
   };
 
-  // Find best matching ledger for a payroll item
-  const findBestMatch = (payrollItemName: string, payrollItemType: PayrollItemType): { ledger: LedgerHead; score: number } | null => {
-    let bestMatch: { ledger: LedgerHead; score: number } | null = null;
-    let bestScore = 0;
+  // Generate payroll_item_id with prefix for arrears items
+  const getPayrollItemIdForMapping = (payrollItemName: string, originalPayrollItemId: string): string => {
+    // If it's an arrears pay head, prefix the ID with "ARR_"
+    if (isArrearsPayHead(payrollItemName)) {
+      return `ARR_${originalPayrollItemId}`;
+    }
+    
+    return originalPayrollItemId;
+  };
 
+  // Find exact matching ledger for a payroll item (strict rule: exact name match only)
+  // Special case: If pay head contains "Arrears", try to match with base name ledger
+  const findBestMatch = (payrollItemName: string, payrollItemType: PayrollItemType): { ledger: LedgerHead; score: number } | null => {
+    // First, try exact name match (strict rule)
     for (const ledger of activeLedgerHeads) {
       // Skip if ledger is already mapped to another item
       const isMapped = payrollMappings.some(m => m.ledgerHeadId === ledger.id);
       if (isMapped) continue;
 
-      // Calculate similarity score
-      const nameScore = calculateSimilarity(payrollItemName, ledger.name);
-      
-      // Boost score if category matches expected type
-      let typeBonus = 0;
-      if (payrollItemType === 'Earning' && (ledger.category === 'Expense' || ledger.name.toLowerCase().includes('salary'))) {
-        typeBonus = 0.2;
-      } else if (payrollItemType === 'Deduction' && (ledger.category === 'Liability' || ledger.name.toLowerCase().includes('deduction'))) {
-        typeBonus = 0.2;
-      } else if (payrollItemType === 'Asset' && ledger.category === 'Asset') {
-        typeBonus = 0.2;
-      } else if (payrollItemType === 'Liability' && ledger.category === 'Liability') {
-        typeBonus = 0.2;
-      }
-
-      const totalScore = nameScore + typeBonus;
-
-      if (totalScore > bestScore && totalScore >= 0.3) { // Minimum threshold of 30% similarity
-        bestScore = totalScore;
-        bestMatch = { ledger, score: totalScore };
+      // Strict rule: Only match if names are exactly the same (case-insensitive, trimmed)
+      if (isExactMatch(payrollItemName, ledger.name)) {
+        return { ledger, score: 1.0 };
       }
     }
 
-    return bestMatch;
+    // If no exact match found, check if this is an arrears pay head
+    const baseName = extractBaseNameFromArrears(payrollItemName);
+    if (baseName) {
+      // Try to find a ledger that contains the base name (exact match of base name)
+      for (const ledger of activeLedgerHeads) {
+        // Skip if ledger is already mapped to another item
+        const isMapped = payrollMappings.some(m => m.ledgerHeadId === ledger.id);
+        if (isMapped) continue;
+
+        // Match if ledger name exactly matches the base name (case-insensitive, trimmed)
+        if (isExactMatch(baseName, ledger.name)) {
+          console.log(`Auto-mapping arrears: "${payrollItemName}" -> "${ledger.name}" (base name: "${baseName}")`);
+          return { ledger, score: 1.0 };
+        }
+      }
+    }
+
+    // No match found
+    return null;
   };
 
-  // Auto map all unmapped payroll items
+  // Auto map all unmapped payroll items (strict rule: exact name match only)
   const handleAutoMap = async () => {
-    if (!window.confirm('This will automatically map unmapped payroll items to similar ledger heads. Continue?')) {
+    if (!window.confirm('This will automatically map unmapped payroll items to ledger heads with EXACT matching names only. Continue?')) {
       return;
     }
 
     setIsAutoMapping(true);
     let mappedCount = 0;
     let skippedCount = 0;
-    const mappingResults: Array<{ payrollItem: string; ledger: string; score: number }> = [];
+    const mappingResults: Array<{ payrollItem: string; ledger: string }> = [];
 
     try {
       // Get all unmapped payroll items
       const unmappedItems = payrollItems.filter(item => {
-        const existingMapping = getExistingMapping(item.id);
+        const existingMapping = getExistingMapping(item.id, item.name);
         return !existingMapping;
       });
 
@@ -441,24 +445,29 @@ const MappingPage: React.FC = () => {
         return;
       }
 
-      // Map each unmapped item
+      // Map each unmapped item - only if exact name match exists
       for (const item of unmappedItems) {
         const match = findBestMatch(item.name, item.type);
         
-        if (match && match.score >= 0.3) {
+        // Strict rule: Only map if exact match found (score will be 1.0 for exact matches)
+        if (match && match.score === 1.0) {
           try {
+            // Get the payroll_item_id with prefix for arrears
+            const payrollItemIdForMapping = getPayrollItemIdForMapping(item.name, item.id);
+            
             await addPayrollMapping({
-              payrollItemId: item.id,
+              payrollItemId: payrollItemIdForMapping,
               payrollItemName: item.name,
               ledgerHeadId: match.ledger.id,
               ledgerHeadName: match.ledger.name,
               financialYear: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1)
             }, true); // Silent mode - don't show individual toasts
+            
+            console.log(`Auto-mapped "${item.name}" (ID: ${payrollItemIdForMapping}) to "${match.ledger.name}"`);
             mappedCount++;
             mappingResults.push({
               payrollItem: item.name,
-              ledger: match.ledger.name,
-              score: match.score
+              ledger: match.ledger.name
             });
           } catch (error) {
             console.error(`Error mapping ${item.name}:`, error);
@@ -471,12 +480,12 @@ const MappingPage: React.FC = () => {
 
       // Show single summary toast
       if (mappedCount > 0) {
-        toast.success(`Auto-mapped ${mappedCount} payroll item${mappedCount > 1 ? 's' : ''} successfully${skippedCount > 0 ? `. ${skippedCount} item${skippedCount > 1 ? 's' : ''} skipped` : ''}`);
+        toast.success(`Auto-mapped ${mappedCount} payroll item${mappedCount > 1 ? 's' : ''} with exact name matches${skippedCount > 0 ? `. ${skippedCount} item${skippedCount > 1 ? 's' : ''} skipped (no exact match found)` : ''}`);
         
         // Log detailed results to console
-        console.log('Auto-mapping results:', mappingResults);
+        console.log('Auto-mapping results (exact matches only):', mappingResults);
       } else {
-        toast.info('No suitable matches found for unmapped items');
+        toast.info(`No exact name matches found. ${skippedCount} item${skippedCount > 1 ? 's' : ''} skipped.`);
       }
     } catch (error) {
       console.error('Error during auto-mapping:', error);
@@ -688,7 +697,7 @@ const MappingPage: React.FC = () => {
               </tr>
             ) : (
               filteredPayrollItems.map((item) => {
-                const existingMapping = getExistingMapping(item.id);
+                const existingMapping = getExistingMapping(item.id, item.name);
                 console.log('Rendering item:', item.name, 'with mapping:', existingMapping);
                 return (
                   <tr key={item.id} className="table-row">
@@ -724,13 +733,20 @@ const MappingPage: React.FC = () => {
                               return true;
                             }
                             // Exclude ledgers that are mapped to other items
+                            // Check both original ID and prefixed ID (for arrears)
+                            const itemIdForMapping = getPayrollItemIdForMapping(item.name, item.id);
                             return !payrollMappings.some(mapping => 
                               mapping.ledgerHeadId === ledger.id && 
-                              mapping.payrollItemId !== item.id
+                              mapping.payrollItemId !== item.id &&
+                              mapping.payrollItemId !== itemIdForMapping
                             );
                           })}
                           value={existingMapping?.ledgerHeadId || ''}
-                          onChange={(ledgerId) => handleMappingChange(item.id, ledgerId)}
+                          onChange={(ledgerId) => {
+                            if (ledgerId) {
+                              handleMappingChange(item.id, ledgerId);
+                            }
+                          }}
                           placeholder="Select Ledger"
                           showCode={true}
                         />

@@ -17,6 +17,8 @@ const LedgersPage: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedLedger, setSelectedLedger] = useState<any>(null);
   const [filter, setFilter] = useState<LedgerCategory | 'All'>('All');
+  const [filterGroup, setFilterGroup] = useState<string>('All');
+  const [filterName, setFilterName] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingLedger, setEditingLedger] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
@@ -141,6 +143,44 @@ const LedgersPage: React.FC = () => {
   };
 
   const handleDownloadExcel = () => {
+    try {
+      // Export filtered ledgers data
+      const exportData = filteredLedgers.map(ledger => ({
+        'Name': ledger.name || '',
+        'Group': ledger.parentGroupName || '',
+        'Sub Group': ledger.groupName || '',
+        'Category': ledger.category || '',
+        'Status': ledger.isActive ? 'Active' : 'Inactive',
+        'Financial Year': getFinancialYearName(ledger.financialYear || '') || '',
+        'Description': ledger.description || '',
+      }));
+
+      if (exportData.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+      
+      // Create worksheet with styled headers
+      const ws = createStyledWorksheet(exportData, 'Ledgers', {
+        columnWidths: [30, 25, 25, 15, 15, 15, 40],
+        freezeHeader: true,
+      });
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Ledgers');
+      
+      const fileName = `ledgers_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success(`Exported ${exportData.length} ledgers to Excel`);
+      return;
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+      toast.error('Failed to export Excel file');
+    }
+  };
+
+  const handleDownloadTemplate = () => {
     try {
       const wb = XLSX.utils.book_new();
       
@@ -375,13 +415,23 @@ const LedgersPage: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
+  // Get unique values for filters
+  const uniqueGroups = Array.from(new Set(ledgerHeads.map(l => l.groupName).filter(Boolean))) as string[];
+  const uniqueNames = Array.from(new Set(ledgerHeads.map(l => l.name).filter(Boolean))).sort() as string[];
+
   const filteredLedgers = ledgerHeads
     .filter((ledger) => showInactive || ledger.isActive)
     .filter((ledger) => filter === 'All' || ledger.category === filter)
+    .filter((ledger) => filterGroup === 'All' || 
+      (filterGroup === 'None' && !ledger.groupName) ||
+      ledger.groupName === filterGroup)
+    .filter((ledger) => filterName === 'All' || ledger.name === filterName)
     .filter(
       (ledger) =>
+        !searchTerm ||
         ledger.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ledger.code?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
+        (ledger.code?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+        (ledger.groupName?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
     )
     .sort((a, b) => {
       // Get the most recent date (either created or updated)
@@ -459,7 +509,7 @@ const LedgersPage: React.FC = () => {
           <Search size={18} className="text-gray-400 mr-2" />
           <input
             type="text"
-            placeholder="Search ledgers..."
+            placeholder="Search ledgers by name, code, or group..."
             className="flex-grow focus:outline-none text-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -482,6 +532,33 @@ const LedgersPage: React.FC = () => {
         </div>
 
         <div className="flex items-center">
+          <select
+            value={filterGroup}
+            onChange={(e) => setFilterGroup(e.target.value)}
+            className="select text-sm py-2"
+          >
+            <option value="All">All Groups</option>
+            <option value="None">No Group</option>
+            {uniqueGroups.map(group => (
+              <option key={group} value={group}>{group}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center">
+          <select
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+            className="select text-sm py-2 min-w-[200px]"
+          >
+            <option value="All">All Names</option>
+            {uniqueNames.slice(0, 100).map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center">
           <input
             type="checkbox"
             id="showInactive"
@@ -500,26 +577,48 @@ const LedgersPage: React.FC = () => {
         <table className="table">
           <thead className="table-header">
             <tr>
-              <th className="table-header-cell">Name</th>
-              <th className="table-header-cell">Code</th>
-              <th className="table-header-cell">Category</th>
-              <th className="table-header-cell">Status</th>
-              <th className="table-header-cell">Financial Year</th>
-              <th className="table-header-cell">Actions</th>
+                  <th className="table-header-cell">Name</th>
+                  <th className="table-header-cell">Group</th>
+                  <th className="table-header-cell">Sub Group</th>
+                  <th className="table-header-cell">Category</th>
+                  <th className="table-header-cell">Status</th>
+                  <th className="table-header-cell">Financial Year</th>
+                  <th className="table-header-cell">Actions</th>
             </tr>
           </thead>
           <tbody className="table-body">
-            {ledgerHeads.length === 0 ? (
+            {filteredLedgers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                  No ledger heads found. Create one to get started.
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                  {ledgerHeads.length === 0 ? (
+                    'No ledger heads found. Create one to get started.'
+                  ) : (
+                    'No ledgers match your filter criteria.'
+                  )}
                 </td>
               </tr>
             ) : (
-              ledgerHeads.map((ledger) => (
+              filteredLedgers.map((ledger) => (
                 <tr key={ledger.id} className="table-row">
                   <td className="table-cell font-medium text-gray-900">{ledger.name}</td>
-                  <td className="table-cell">{ledger.code || '-'}</td>
+                  <td className="table-cell">
+                    {ledger.parentGroupName ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        {ledger.parentGroupName}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="table-cell">
+                    {ledger.groupName ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {ledger.groupName}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="table-cell">
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -656,6 +755,12 @@ const LedgersPage: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {filteredLedgers.length > 0 && (
+        <div className="text-sm text-gray-600">
+          Showing {filteredLedgers.length} of {ledgerHeads.length} ledgers
         </div>
       )}
     </div>

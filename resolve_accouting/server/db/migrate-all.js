@@ -13,7 +13,13 @@ const migrations = [
   { file: '001_create_payroll_mappings.sql', path: '001_create_payroll_mappings.sql' },
   { file: '001_create_tally_push_logs.sql', path: path.resolve(__dirname, '../../src/server/migrations/001_create_tally_push_logs.sql') },
   { file: '002_create_organization_tally_config.sql', path: '002_create_organization_tally_config.sql' },
-  { file: '004_add_org_id_to_tables.sql', path: '004_add_org_id_to_tables.sql' }
+  { file: '004_add_org_id_to_tables.sql', path: '004_add_org_id_to_tables.sql' },
+  { file: '005_create_tally_groups_table.sql', path: '005_create_tally_groups_table.sql' },
+  { file: '006_add_group_id_to_ledger.sql', path: '006_add_group_id_to_ledger.sql' },
+  { file: '007_ensure_org_id_in_ledger.sql', path: '007_ensure_org_id_in_ledger.sql' },
+  { file: '008_create_tally_sub_groups_table.sql', path: '008_create_tally_sub_groups_table.sql' },
+  { file: '009_ensure_org_id_in_payrun_ledger_mappings.sql', path: '009_ensure_org_id_in_payrun_ledger_mappings.sql' },
+  { file: '010_add_parent_group_id_to_tally_groups.sql', path: '010_add_parent_group_id_to_tally_groups.sql' }
 ];
 
 async function runMigrations() {
