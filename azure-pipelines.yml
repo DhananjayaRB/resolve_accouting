@@ -1,0 +1,143 @@
+# Azure Pipeline for Resolve Accounting Application
+# Deploys to Azure App Service
+
+trigger:
+  branches:
+    include:
+      - main
+      - master
+      - develop
+  paths:
+    exclude:
+      - README.md
+      - '*.md'
+      - .gitignore
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  nodeVersion: '20.x'
+  workingDirectory: 'resolve_accouting'
+  appName: 'resolve-accounting-app'  # Update with your Azure App Service name
+  resourceGroup: 'resolve-accounting-rg'  # Update with your Azure Resource Group
+
+stages:
+  - stage: Build
+    displayName: 'Build Application'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build and Test'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(nodeVersion)'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+
+          - script: |
+              echo "Node version:"
+              node --version
+              echo "NPM version:"
+              npm --version
+            displayName: 'Check Node.js and NPM versions'
+
+          - task: Npm@1
+            displayName: 'Install root dependencies'
+            inputs:
+              workingDir: '.'
+              verbose: false
+
+          - task: Npm@1
+            displayName: 'Install application dependencies'
+            inputs:
+              workingDir: '$(workingDirectory)'
+              verbose: false
+
+          - script: |
+              cd $(workingDirectory)
+              npm run build
+            displayName: 'Build Frontend Application'
+            continueOnError: false
+
+          - script: |
+              echo "Build artifacts:"
+              ls -la $(workingDirectory)/dist
+            displayName: 'List build artifacts'
+            condition: succeeded()
+
+          - script: |
+              echo "Preparing deployment package..."
+              # Copy root package.json to working directory for deployment
+              cp package.json $(workingDirectory)/
+              cp package-lock.json $(workingDirectory)/ 2>/dev/null || echo "No package-lock.json in root"
+              echo "Deployment package prepared"
+            displayName: 'Prepare deployment package'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish build artifacts'
+            inputs:
+              pathToPublish: '$(workingDirectory)'
+              artifactName: 'drop'
+              publishLocation: 'Container'
+
+  - stage: Deploy
+    displayName: 'Deploy to Azure App Service'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployToAzure
+        displayName: 'Deploy to Azure App Service'
+        environment: 'production'  # Update with your environment name
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: NodeTool@0
+                  displayName: 'Use Node.js $(nodeVersion)'
+                  inputs:
+                    versionSpec: '$(nodeVersion)'
+
+                - script: |
+                    echo "Verifying deployment package structure..."
+                    ls -la $(Pipeline.Workspace)/drop
+                    echo "Package structure verified"
+                  displayName: 'Verify deployment package'
+
+                - task: AzureWebApp@1
+                  displayName: 'Deploy to Azure App Service'
+                  inputs:
+                    azureSubscription: 'Azure-Service-Connection'  # Update with your Azure service connection name
+                    appName: '$(appName)'
+                    package: '$(Pipeline.Workspace)/drop'
+                    deployToSlotOrASE: false
+                    resourceGroupName: '$(resourceGroup)'
+                    appSettings: |
+                      [
+                        {
+                          "name": "NODE_ENV",
+                          "value": "production",
+                          "slotSetting": false
+                        },
+                        {
+                          "name": "PORT",
+                          "value": "8080",
+                          "slotSetting": false
+                        },
+                        {
+                          "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+                          "value": "false",
+                          "slotSetting": false
+                        },
+                        {
+                          "name": "WEBSITE_NODE_DEFAULT_VERSION",
+                          "value": "~20",
+                          "slotSetting": false
+                        }
+                      ]
+                    startupCommand: 'npm start'
+
+                - script: |
+                    echo "Deployment completed successfully!"
+                    echo "Application URL: https://$(appName).azurewebsites.net"
+                  displayName: 'Deployment Summary'
+
